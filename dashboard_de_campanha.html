@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Geográfico Dinâmico - RJ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f1f5f9;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .glass-base {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 4px 20px 0 rgba(15, 23, 42, 0.03);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .canvas-container {
+            aspect-ratio: 1414 / 900;
+            max-width: 1414px;
+        }
+
+        .svg-lines-layer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .map-point {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            z-index: 20;
+            transform: translate(-50%, -50%);
+            transition: opacity 0.4s ease;
+            box-shadow: 0 0 8px rgba(0,0,0,0.15);
+        }
+
+        .map-label {
+            position: absolute;
+            text-align: center;
+            z-index: 25;
+            transform: translate(-50%, -50%);
+            transition: opacity 0.4s ease;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .is-filtered-out {
+            opacity: 0.05 !important;
+        }
+
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        @media (max-width: 767px) {
+            body {
+                background-color: #ffffff;
+            }
+            
+            .canvas-container {
+                aspect-ratio: unset !important;
+                max-width: 100% !important;
+                height: 100vh;
+                height: 100dvh;
+                border-radius: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+            }
+
+            .map-wrapper-mobile {
+                height: 45%;
+                border-bottom: 1px solid #e2e8f0;
+            }
+
+            .desktop-only { display: none !important; }
+            #central-total-card { display: none !important; }
+            .map-label { display: none !important; }
+            .svg-lines-layer { display: none !important; }
+            
+            footer {
+                display: none !important;
+            }
+
+            .map-point {
+                width: 16px;
+                height: 16px;
+                border: 2px solid #ffffff;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                animation: pulse-point 2s infinite;
+            }
+
+            @keyframes pulse-point {
+                0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); }
+                70% { box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); }
+            }
+
+            .mobile-list-container {
+                height: 55%;
+                overflow-y: auto;
+                background: #f8fafc;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .mobile-list-container::-webkit-scrollbar { width: 0px; }
+
+            .mobile-lead-card {
+                transition: all 0.3s ease;
+                cursor: pointer;
+            }
+            .mobile-lead-card:active {
+                background-color: #f1f5f9;
+                transform: scale(0.98);
+            }
+            .mobile-lead-card.is-hidden-mobile {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-start min-h-screen md:p-2 md:p-6">
+
+    <div class="w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col canvas-container relative">
+        
+        <!-- CABEÇALHO -->
+        <header class="w-full bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 py-3 md:py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center z-50 gap-3 flex-shrink-0">
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center gap-3">
+                    <div>
+                        <span class="text-[10px] font-bold tracking-widest text-indigo-600 uppercase desktop-only">Distribuição GeoAnalítica</span>
+                        <h1 class="text-base md:text-xl font-bold text-slate-900 tracking-tight">Mapa de Lideranças <span class="md:hidden text-slate-400 font-normal text-sm">(RJ)</span></h1>
+                    </div>
+                    
+                    <!-- BOTÃO MODAL CONTATOS (DESKTOP) -->
+                    <button id="btn-ver-contatos" onclick="toggleModalNomes()" class="hidden md:flex items-center justify-center w-9 h-9 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="Ver Contatos">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path> <circle cx="9" cy="7" r="4"></circle> <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path> <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- FILTRO DE FUNÇÃO -->
+                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                    <span class="text-xs text-slate-500 font-medium">Função:</span>
+                    <select id="function-filter" onchange="changeFunctionFilter(this.value)" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer">
+                        <option value="all">Todas</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Contador Mobile -->
+            <div id="mobile-header-count" class="md:hidden flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                <span class="text-xs text-slate-500 font-medium">Total:</span>
+                <span id="mobile-total-count" class="text-lg font-black text-slate-900 leading-none">0</span>
+                <span id="mobile-status-text" class="text-[9px] font-medium text-sky-500 ml-1 animate-pulse">Sincronizando</span>
+            </div>
+
+            <!-- BOTÕES DE FILTRO DE REGIÃO -->
+            <div class="flex flex-wrap gap-1.5" id="filter-wrapper">
+                <button onclick="changeRegionFilter('all')" id="f-all" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-slate-900 text-white transition-all shadow-sm">Todos</button>
+                <button onclick="changeRegionFilter('Zona Norte')" id="f-zn" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Norte</button>
+                <button onclick="changeRegionFilter('Zona Oeste')" id="f-zo" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Oeste</button>
+                <button onclick="changeRegionFilter('Zona Sudoeste')" id="f-zsd" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Sudoeste</button>
+                <button onclick="changeRegionFilter('Centro')" id="f-cc" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Centro</button>
+                <button onclick="changeRegionFilter('Baixada')" id="f-bx" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Baixada</button>
+                <button onclick="changeRegionFilter('Zona Sul')" id="f-zs" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Sul</button>
+            </div>
+        </header>
+
+        <!-- ÁREA DO MAPA -->
+        <div class="map-wrapper-mobile flex-1 relative w-full overflow-hidden bg-slate-50 select-none">
+            
+            <div class="absolute inset-0 z-0 opacity-80 pointer-events-none">
+                <svg viewBox="0 0 1414 780" class="w-full h-full object-cover" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="1414" height="780" fill="#f8fafc" />
+                    <path d="M 0 620 Q 180 640 280 780 L 0 780 Z" fill="#e2e8f0" />
+                    <path d="M 1120 0 Q 1060 220 1260 380 Q 1340 330 1414 360 L 1414 0 Z" fill="#e2e8f0" />
+                    <path d="M 200 780 Q 600 720 1000 750 Q 1200 730 1414 780 L 1414 780 Z" fill="#cbd5e1" opacity="0.6"/>
+                    <path d="M 280 180 L 400 40 L 750 20 L 1000 40 L 1120 110 L 880 160 L 680 130 Z" fill="#fef3c7" stroke="#fde68a" stroke-width="2"/>
+                    <path d="M 30 260 L 330 180 L 540 330 L 600 500 L 460 670 L 220 730 L 30 560 Z" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="2"/>
+                    <path d="M 540 330 L 700 360 L 730 520 L 600 500 Z" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+                    <path d="M 330 180 L 680 130 L 880 160 L 1080 260 L 1040 440 L 840 420 L 730 520 L 700 360 L 540 330 Z" fill="#f0f9ff" stroke="#bae6fd" stroke-width="2"/>
+                    <path d="M 1080 260 Q 1180 110 1260 190 Q 1210 300 1080 260 Z" fill="#e0f2fe" stroke="#7dd3fc" stroke-width="1.5"/>
+                    <path d="M 1040 440 L 1080 260 L 1200 310 L 1240 460 L 1140 600 L 960 580 L 840 420 Z" fill="#eef2ff" stroke="#c7d2fe" stroke-width="2"/>
+                </svg>
+            </div>
+
+            <!-- Card Central (Apenas Desktop) -->
+            <div id="central-total-card" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-72 h-72 rounded-full glass-base flex flex-col justify-center items-center text-center border-2 border-indigo-500/20 shadow-xl pointer-events-none scale-100 opacity-100">
+                <span class="text-[11px] font-extrabold uppercase tracking-widest text-indigo-600">Volume Amostral</span>
+                <span id="txt-total-count" class="text-7xl font-black text-slate-900 tracking-tighter my-2 animate-pulse">0</span>
+                <span class="text-xs font-semibold text-slate-500 max-w-[180px]">Leads mapeados em tempo real</span>
+                <span id="status-text" class="text-xs font-semibold text-sky-500 mt-1 animate-pulse">Carregando dados...</span>
+            </div>
+
+            <!-- Camada SVG (Apenas Desktop) -->
+            <svg class="svg-lines-layer" id="svg-lines-layer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+
+            <!-- Pontos e Textos -->
+            <div id="map-bounds" class="absolute inset-0 z-20 overflow-hidden"></div>
+
+            <!-- MODAL NOMES (Apenas Desktop) -->
+            <div id="modal-nomes-overlay" class="absolute inset-0 z-[60] hidden p-4 md:p-8">
+                <div class="w-full h-full glass-base rounded-2xl flex flex-col p-6 relative border border-white/60 shadow-2xl">
+                    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-200/60">
+                        <h2 class="text-xl font-bold text-slate-900">Contatos Mapeados</h2>
+                        <button onclick="toggleModalNomes()" class="text-slate-500 hover:text-slate-900 p-1 rounded-full hover:bg-slate-200/50 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </div>
+                    <div id="modal-nomes-content" class="overflow-y-auto flex-1 pr-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Populado via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LISTA MOBILE -->
+        <div class="mobile-list-container md:hidden px-4 pt-4 pb-8">
+            <div id="mobile-list-content" class="flex flex-col gap-2.5"></div>
+        </div>
+
+        <!-- Footer (Apenas Desktop) -->
+        <footer class="desktop-only w-full bg-white border-t border-slate-100 px-8 py-2.5 flex justify-between items-center z-40 text-[11px] text-slate-400">
+            <div class="flex gap-4">
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-sky-400"></span> Zona Norte</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Zona Oeste</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-violet-400"></span> Zona Sudoeste</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-indigo-400"></span> Centro</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400"></span> Baixada</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-400"></span> Zona Sul</span>
+            </div>
+            <div class="font-medium">Navegação Dinâmica Homologada</div>
+        </footer>
+    </div>
+
+    <script>
+        const SHEET_ID = '1VGgM5QNBY0SiN3VuVYdQB78joPz9blvdrdHNQj9v73I'; 
+        const SHEET_NAME = 'Página 1';
+
+        let geoDatabase = [];
+        let currentRegionFilter = 'all';
+        let currentFunctionFilter = 'all';
+        let allFunctionsList = new Set();
+        let fetchTimeout;
+
+        const geoDicionario = {
+            // --- BAIXADA ---
+            "Caxias": {x: 58, y: 11, regiao: "Baixada"},
+            "Nilópolis": {x: 44, y: 13, regiao: "Baixada"}, "Nilopolis": {x: 44, y: 13, regiao: "Baixada"},
+            "Coronel Almeida": {x: 50, y: 8, regiao: "Baixada"},
+            "Itaguaí": {x: 18, y: 20, regiao: "Baixada"},
+            "Mesquita": {x: 35, y: 10, regiao: "Baixada"},
+            "Queimados": {x: 42, y: 5, regiao: "Baixada"},
+            "Nova Iguaçu": {x: 30, y: 5, regiao: "Baixada"},
+            "Belford Roxo": {x: 50, y: 5, regiao: "Baixada"},
+            "São João de Meriti": {x: 55, y: 7, regiao: "Baixada"},
+            "Japeri": {x: 22, y: 10, regiao: "Baixada"},
+            "Paracambi": {x: 15, y: 12, regiao: "Baixada"},
+            "Serpentina": {x: 65, y: 8, regiao: "Baixada"},
+
+            // --- ZONA OESTE ---
+            "Magalhães Bastos": {x: 30, y: 40, regiao: "Zona Oeste"}, "Magalhaes Bastos": {x: 30, y: 40, regiao: "Zona Oeste"},
+            "Mallet": {x: 26, y: 48, regiao: "Zona Oeste"}, "Malet": {x: 26, y: 48, regiao: "Zona Oeste"},
+            "Vila Kennedy": {x: 12, y: 45, regiao: "Zona Oeste"},
+            "Campo Grande": {x: 18, y: 55, regiao: "Zona Oeste"},
+            "Santa Cruz": {x: 8, y: 50, regiao: "Zona Oeste"},
+            "Senador Camará": {x: 15, y: 48, regiao: "Zona Oeste"},
+            "Paciência": {x: 12, y: 60, regiao: "Zona Oeste"},
+            "Sepetiba": {x: 5, y: 58, regiao: "Zona Oeste"},
+            "Santíssimo": {x: 10, y: 55, regiao: "Zona Oeste"},
+            "Inhoaíba": {x: 8, y: 45, regiao: "Zona Oeste"},
+            "Cosmos": {x: 15, y: 60, regiao: "Zona Oeste"},
+            "Camorim": {x: 20, y: 70, regiao: "Zona Oeste"},
+
+            // --- ZONA SUDOESTE ---
+            "Realengo": {x: 20, y: 42, regiao: "Zona Sudoeste"},
+            "Gardênia": {x: 42, y: 55, regiao: "Zona Sudoeste"}, "Gardenia": {x: 42, y: 55, regiao: "Zona Sudoeste"},
+            "Sulacap": {x: 32, y: 52, regiao: "Zona Sudoeste"},
+            "Taquara": {x: 38, y: 62, regiao: "Zona Sudoeste"}, 
+            "Bangu": {x: 15, y: 36, regiao: "Zona Sudoeste"}, 
+            "Curicica": {x: 34, y: 68, regiao: "Zona Sudoeste"},
+            "Guaratiba": {x: 10, y: 65, regiao: "Zona Sudoeste"},
+            "Cidade de Deus": {x: 36, y: 60, textX: 30, textY: 70, regiao: "Zona Sudoeste"},
+            "Pedra de Guaratiba": {x: 6, y: 70, textX: 8, textY: 82, regiao: "Zona Sudoeste"},
+            "Barra de Guaratiba": {x: 4, y: 75, regiao: "Zona Sudoeste"},
+            "Recreio dos Bandeirantes": {x: 12, y: 78, regiao: "Zona Sudoeste"},
+            "Vargem Grande": {x: 8, y: 85, regiao: "Zona Sudoeste"},
+            "Vargem Pequena": {x: 10, y: 82, regiao: "Zona Sudoeste"},
+            "Vila Valqueire": {x: 25, y: 55, regiao: "Zona Sudoeste"},
+            "Tanque": {x: 22, y: 60, regiao: "Zona Sudoeste"},
+            "Praça Seca": {x: 28, y: 58, regiao: "Zona Sudoeste"},
+            "Pechincha": {x: 30, y: 65, regiao: "Zona Sudoeste"},
+            "Freguesia": {x: 28, y: 72, regiao: "Zona Sudoeste"},
+
+            // --- ZONA NORTE ---
+            "Deodoro": {x: 38, y: 36, textX: 25, textY: 30, regiao: "Zona Norte"}, 
+            "Ricardo de Albuquerque": {x: 44, y: 32, textX: 35, textY: 22, regiao: "Zona Norte"}, 
+            "Anchieta": {x: 41, y: 26, textX: 30, textY: 16, regiao: "Zona Norte"}, 
+            "Cachambi": {x: 68, y: 46, textX: 88, textY: 42, regiao: "Zona Norte"}, 
+            "Costa Barros": {x: 49, y: 25, textX: 55, textY: 14, regiao: "Zona Norte"}, 
+            "Bonsucesso": {x: 74, y: 34, textX: 90, textY: 30, regiao: "Zona Norte"}, 
+            "Ilha do Governador": {x: 80, y: 20, textX: 92, textY: 16, regiao: "Zona Norte"}, 
+            "Jacarezinho": {x: 71, y: 40, textX: 85, textY: 36, regiao: "Zona Norte"}, 
+            "Madureira": {x: 53, y: 42, textX: 40, textY: 50, regiao: "Zona Norte"}, 
+            "Piedade": {x: 59, y: 47, textX: 70, textY: 56, regiao: "Zona Norte"}, 
+            "Vigário Geral": {x: 65, y: 22, textX: 75, textY: 12, regiao: "Zona Norte"}, 
+            "Bento Ribeiro": {x: 48, y: 39, textX: 35, textY: 42, regiao: "Zona Norte"}, 
+            "Cavalcante": {x: 56, y: 36, textX: 60, textY: 22, regiao: "Zona Norte"}, 
+            "Engenho Novo": {x: 65, y: 52, textX: 80, textY: 52, regiao: "Zona Norte"}, 
+            "Guadalupe": {x: 50, y: 30, textX: 48, textY: 16, regiao: "Zona Norte"}, 
+            "Kelson": {x: 76, y: 28, textX: 85, textY: 24, regiao: "Zona Norte"}, 
+            "Abolição": {x: 61, y: 42, textX: 50, textY: 60, regiao: "Zona Norte"}, 
+            "Água Santa": {x: 58, y: 53, textX: 60, textY: 66, regiao: "Zona Norte"}, 
+            "Cascadura": {x: 54, y: 47, textX: 30, textY: 60, regiao: "Zona Norte"}, 
+            "Encantado": {x: 63, y: 46, textX: 75, textY: 48, regiao: "Zona Norte"}, 
+            "Engenho da Rainha": {x: 59, y: 33, textX: 65, textY: 16, regiao: "Zona Norte"}, 
+            "Fazenda Botafogo": {x: 53, y: 26, textX: 42, textY: 16, regiao: "Zona Norte"}, 
+            "Honório Gurgel": {x: 48, y: 34, textX: 25, textY: 36, regiao: "Zona Norte"}, 
+            "Inhaúma": {x: 64, y: 38, textX: 72, textY: 30, regiao: "Zona Norte"}, "Inhauma": {x: 64, y: 38, textX: 72, textY: 30, regiao: "Zona Norte"},
+            "Lins de Vasconcelos": {x: 67, y: 58, textX: 80, textY: 62, regiao: "Zona Norte"}, 
+            "Marechal Hermes": {x: 44, y: 45, textX: 20, textY: 50, regiao: "Zona Norte"}, 
+            "Mariópolis": {x: 38, y: 28, textX: 15, textY: 22, regiao: "Zona Norte"}, "Mariopolis": {x: 38, y: 28, textX: 15, textY: 22, regiao: "Zona Norte"},
+            "Méier": {x: 70, y: 52, textX: 88, textY: 56, regiao: "Zona Norte"}, "Meier": {x: 70, y: 52, textX: 88, textY: 56, regiao: "Zona Norte"},
+            "Oswaldo Cruz": {x: 50, y: 45, textX: 25, textY: 56, regiao: "Zona Norte"}, 
+            "Pavuna": {x: 56, y: 21, textX: 50, textY: 8, regiao: "Zona Norte"}, 
+            "Pilares": {x: 62, y: 39, textX: 68, textY: 24, regiao: "Zona Norte"}, 
+            "Quintino": {x: 56, y: 51, textX: 45, textY: 66, regiao: "Zona Norte"},
+            "São Francisco Xavier": {x: 72, y: 48, textX: 65, textY: 40, regiao: "Zona Norte"},
+            "Irajá": {x: 60, y: 30, regiao: "Zona Norte"},
+            "Colégio": {x: 58, y: 28, regiao: "Zona Norte"},
+            "Vaz Lobo": {x: 55, y: 25, regiao: "Zona Norte"},
+            "Turiaçu": {x: 52, y: 22, regiao: "Zona Norte"},
+            "Parada de Lucas": {x: 62, y: 25, regiao: "Zona Norte"},
+            "Acari": {x: 60, y: 20, regiao: "Zona Norte"},
+            "Barros Filho": {x: 57, y: 18, regiao: "Zona Norte"},
+            "Coelho Neto": {x: 59, y: 15, regiao: "Zona Norte"},
+            "Engenho de Dentro": {x: 66, y: 45, regiao: "Zona Norte"},
+            "Sampaio": {x: 68, y: 48, regiao: "Zona Norte"},
+            "Maracanã": {x: 72, y: 45, regiao: "Zona Norte"},
+            "Vila Isabel": {x: 74, y: 48, regiao: "Zona Norte"},
+            "Todos os Santos": {x: 70, y: 50, regiao: "Zona Norte"},
+            "Grajaú": {x: 66, y: 55, regiao: "Zona Norte"},
+            "Andaraí": {x: 75, y: 54, regiao: "Zona Norte"}, "Andarai": {x: 75, y: 54, regiao: "Zona Norte"},
+            "Rocha Miranda": {x: 52, y: 35, regiao: "Zona Norte"},
+            "Souto": {x: 50, y: 38, regiao: "Zona Norte"},
+
+            // --- CENTRO ---
+            "Estácio / Centro": {x: 84, y: 48, regiao: "Centro"}, "Estacio / Centro": {x: 84, y: 48, regiao: "Centro"},
+            "Estácio": {x: 80, y: 45, textX: 68, textY: 35, regiao: "Centro"}, "Estacio": {x: 80, y: 45, textX: 68, textY: 35, regiao: "Centro"},
+            "Rua Luís Vargas": {x: 88, y: 53, regiao: "Centro"}, "Rua Luis Vargas": {x: 88, y: 53, regiao: "Centro"},
+            "Santa Tereza": {x: 78, y: 45, textX: 75, textY: 35, regiao: "Centro"}, 
+            "Catete": {x: 80, y: 60, regiao: "Centro"}, 
+            "Lapa": {x: 78, y: 55, regiao: "Centro"}, 
+            "Glória": {x: 82, y: 60, regiao: "Centro"},
+            "Rio Comprido": {x: 76, y: 50, regiao: "Centro"}, 
+            "Cidade Nova": {x: 80, y: 50, regiao: "Centro"},
+            "Praça da Bandeira": {x: 75, y: 45, regiao: "Centro"}, 
+            "Santo Cristo": {x: 85, y: 55, regiao: "Centro"},
+            "Gamboa": {x: 88, y: 58, regiao: "Centro"}, 
+            "Saúde": {x: 82, y: 65, regiao: "Centro"},
+            "Cosme Velho": {x: 72, y: 65, regiao: "Centro"},
+
+            // --- ZONA SUL ---
+            "Urca": {x: 85, y: 78, textX: 92, textY: 82, regiao: "Zona Sul"},
+            "Leme": {x: 78, y: 82, textX: 85, textY: 86, regiao: "Zona Sul"},
+            "Copacabana": {x: 72, y: 88, textX: 80, textY: 92, regiao: "Zona Sul"},
+            "Ipanema": {x: 65, y: 92, textX: 72, textY: 96, regiao: "Zona Sul"},
+            "Leblon": {x: 58, y: 95, textX: 50, textY: 92, regiao: "Zona Sul"},
+            "Rocinha": {x: 55, y: 90, textX: 45, textY: 86, regiao: "Zona Sul"},
+            "Vidigal": {x: 60, y: 96, textX: 65, textY: 98, regiao: "Zona Sul"},
+            "São Conrado": {x: 50, y: 98, textX: 42, textY: 92, regiao: "Zona Sul"}, "Sao Conrado": {x: 50, y: 98, textX: 42, textY: 92, regiao: "Zona Sul"},
+            "Gávea": {x: 62, y: 78, textX: 55, textY: 75, regiao: "Zona Sul"}, "Gavea": {x: 62, y: 78, textX: 55, textY: 75, regiao: "Zona Sul"},
+            "Jardim Botânico": {x: 68, y: 76, textX: 60, textY: 72, regiao: "Zona Sul"}, "Jardim Botanico": {x: 68, y: 76, textX: 60, textY: 72, regiao: "Zona Sul"},
+            "Laranjeiras": {x: 77, y: 68, textX: 65, textY: 64, regiao: "Zona Sul"},
+            "Botafogo": {x: 80, y: 72, textX: 90, textY: 75, regiao: "Zona Sul"},
+            "Flamengo": {x: 75, y: 65, textX: 65, textY: 70, regiao: "Zona Sul"},
+            "Humaitá": {x: 76, y: 72, textX: 68, textY: 78, regiao: "Zona Sul"}, "Humaita": {x: 76, y: 72, textX: 68, textY: 78, regiao: "Zona Sul"}
+        };
+
+        const colorsMap = {
+            "Zona Norte": { text: "text-sky-600", dot: "bg-sky-500", border: "border-sky-400" },
+            "Zona Oeste": { text: "text-emerald-600", dot: "bg-emerald-500", border: "border-emerald-400" },
+            "Zona Sudoeste": { text: "text-violet-600", dot: "bg-violet-500", border: "border-violet-400" },
+            "Centro": { text: "text-indigo-600", dot: "bg-indigo-500", border: "border-indigo-400" },
+            "Baixada": { text: "text-amber-600", dot: "bg-amber-500", border: "border-amber-400" },
+            "Zona Sul": { text: "text-rose-600", dot: "bg-rose-500", border: "border-rose-400" }
+        };
+
+        const svgStrokeColors = {
+            "Zona Norte": "#38bdf8", "Zona Oeste": "#34d399", "Zona Sudoeste": "#8b5cf6", "Centro": "#818cf8", "Baixada": "#fbbf24", "Zona Sul": "#fb7185"
+        };
+
+        // ==========================================
+        // LÓGICA DE FETCH, ERRO E CACHE
+        // ==========================================
+        function handleFetchError() {
+            clearTimeout(fetchTimeout);
+            const statusEl = document.getElementById('status-text');
+            const mobileStatusEl = document.getElementById('mobile-status-text');
+            
+            if (geoDatabase.length > 0) {
+                // Se já tem dados (cache), avisa modo offline
+                if(statusEl) {
+                    statusEl.innerText = "Modo Offline (Cache)";
+                    statusEl.className = "text-xs font-semibold text-rose-500 mt-1";
+                }
+                if(mobileStatusEl) {
+                    mobileStatusEl.innerText = "Offline";
+                    mobileStatusEl.className = "text-[9px] font-medium text-rose-500 ml-1";
+                }
+            } else {
+                // Se não tem cache, avisa erro
+                if(statusEl) {
+                    statusEl.innerText = "Erro ao carregar dados";
+                    statusEl.className = "text-xs font-semibold text-rose-500 mt-1";
+                }
+                if(mobileStatusEl) {
+                    mobileStatusEl.innerText = "Erro";
+                    mobileStatusEl.className = "text-[9px] font-medium text-rose-500 ml-1";
+                }
+            }
+        }
+
+        function fetchSpreadsheetData() {
+            const statusEl = document.getElementById('status-text');
+            const mobileStatusEl = document.getElementById('mobile-status-text');
+            if(statusEl) {
+                statusEl.innerText = "Sincronizando...";
+                statusEl.className = "text-xs font-semibold text-sky-500 mt-1 animate-pulse";
+            }
+            if(mobileStatusEl) {
+                mobileStatusEl.innerText = "Sincronizando";
+                mobileStatusEl.className = "text-[9px] font-medium text-sky-500 ml-1 animate-pulse";
+            }
+
+            const script = document.createElement('script');
+            script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:processarRetornoPlanilha&sheet=${encodeURIComponent(SHEET_NAME)}`;
+            
+            script.onerror = handleFetchError;
+            document.body.appendChild(script);
+
+            // Timeout de segurança reduzido para 7 segundos para testes mais rápidos
+            fetchTimeout = setTimeout(handleFetchError, 7000);
+        }
+
+        window.processarRetornoPlanilha = function(json) {
+            clearTimeout(fetchTimeout);
+            
+            // Validação básica da resposta
+            if (!json || !json.table || !json.table.rows) {
+                handleFetchError();
+                return;
+            }
+
+            geoDatabase = [];
+            const bairroAgrupamento = {}; 
+            allFunctionsList = new Set(); 
+            
+            const mapaBusca = Object.keys(geoDicionario).reduce((acc, bairro) => {
+                acc[bairro.toLowerCase()] = bairro;
+                return acc;
+            }, {});
+
+            json.table.rows.forEach(row => {
+                if (!row.c || !row.c[0]) return; 
+                let valorBairro = row.c[0].v;
+                if (typeof valorBairro !== 'string') return; 
+                
+                let valorFuncao = row.c[4] && row.c[4].v ? row.c[4].v.toString().trim() : "Não definida";
+                let nomeContato = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "Não informado";
+                
+                allFunctionsList.add(valorFuncao);
+
+                let textoFormatado = valorBairro.trim().toLowerCase();
+                if (!mapaBusca[textoFormatado]) return;
+
+                let nomeRealDoBairro = mapaBusca[textoFormatado];
+                
+                if (!bairroAgrupamento[nomeRealDoBairro]) {
+                    bairroAgrupamento[nomeRealDoBairro] = { total: 0, funcoes: {}, nomes: [] };
+                }
+                
+                bairroAgrupamento[nomeRealDoBairro].total++;
+                bairroAgrupamento[nomeRealDoBairro].funcoes[valorFuncao] = (bairroAgrupamento[nomeRealDoBairro].funcoes[valorFuncao] || 0) + 1;
+                bairroAgrupamento[nomeRealDoBairro].nomes.push({ nome: nomeContato, funcao: valorFuncao });
+            });
+
+            const selectFuncoes = document.getElementById('function-filter');
+            // Limpa opções antigas exceto a primeira (Todas)
+            selectFuncoes.innerHTML = '<option value="all">Todas</option>';
+            allFunctionsList.forEach(funcao => {
+                let option = document.createElement('option');
+                option.value = funcao;
+                option.innerText = funcao;
+                selectFuncoes.appendChild(option);
+            });
+
+            for (let bairro in bairroAgrupamento) {
+                let dadosBairro = bairroAgrupamento[bairro];
+                let geoInfo = geoDicionario[bairro];
+                
+                geoDatabase.push({
+                    bairro: bairro, 
+                    regiao: geoInfo.regiao, 
+                    x: geoInfo.x, y: geoInfo.y,
+                    textX: geoInfo.textX, textY: geoInfo.textY, 
+                    totalGeral: dadosBairro.total,
+                    funcoes: dadosBairro.funcoes,
+                    nomes: dadosBairro.nomes
+                });
+            }
+
+            // Salva no Cache (Local Storage)
+            try {
+                localStorage.setItem('painel_rj_cache', JSON.stringify(geoDatabase));
+                localStorage.setItem('painel_rj_funcoes', JSON.stringify(Array.from(allFunctionsList)));
+            } catch(e) { console.error("Erro ao salvar cache", e); }
+
+            // Atualiza status para Sucesso (Tempo Real)
+            const statusEl = document.getElementById('status-text');
+            const mobileStatusEl = document.getElementById('mobile-status-text');
+            if(statusEl) {
+                statusEl.innerText = "Tempo Real";
+                statusEl.className = "text-xs font-semibold text-emerald-500 mt-1";
+            }
+            if(mobileStatusEl) {
+                mobileStatusEl.innerText = "Online";
+                mobileStatusEl.className = "text-[9px] font-medium text-emerald-500 ml-1";
+            }
+
+            initMap();
+            initMobileList(); 
+            applyFilters(); 
+        };
+
+        function getCalloutPath(x1, y1, x2, y2) {
+            return `M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}`;
+        }
+
+        function initMap() {
+            const container = document.getElementById('map-bounds');
+            const svgLayer = document.getElementById('svg-lines-layer');
+            container.innerHTML = '';
+            svgLayer.innerHTML = '';
+
+            geoDatabase.forEach((data) => {
+                const uiColor = colorsMap[data.regiao];
+                const strokeColor = svgStrokeColors[data.regiao];
+                const finalTextX = data.textX !== undefined ? data.textX : data.x + 4;
+                const finalTextY = data.textY !== undefined ? data.textY : data.y - 8;
+
+                const point = document.createElement('div');
+                point.className = `map-point ${uiColor.dot}`;
+                point.style.left = `${data.x}%`;
+                point.style.top = `${data.y}%`;
+                point.setAttribute('data-region', data.regiao);
+                container.appendChild(point);
+
+                const label = document.createElement('div');
+                label.className = `map-label ${uiColor.text}`;
+                label.style.left = `${finalTextX}%`;
+                label.style.top = `${finalTextY}%`;
+                label.setAttribute('data-region', data.regiao);
+                container.appendChild(label);
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', getCalloutPath(data.x, data.y, finalTextX, finalTextY));
+                path.setAttribute('stroke', strokeColor);
+                path.setAttribute('stroke-width', "0.25");
+                path.setAttribute('fill', 'none');
+                path.setAttribute('data-region', data.regiao);
+                svgLayer.appendChild(path);
+
+                data.domPoint = point;
+                data.domLabel = label;
+                data.domLine = path;
+            });
+        }
+
+        function initMobileList() {
+            const listContainer = document.getElementById('mobile-list-content');
+            listContainer.innerHTML = ''; 
+
+            geoDatabase.forEach(data => {
+                const uiColor = colorsMap[data.regiao];
+                const card = document.createElement('div');
+                card.className = 'mobile-lead-card bg-white p-4 rounded-2xl border border-slate-100 shadow-sm';
+                card.setAttribute('data-region', data.regiao);
+                
+                card.innerHTML = `
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl ${uiColor.dot} bg-opacity-10 flex items-center justify-center flex-shrink-0">
+                            <div class="w-3 h-3 rounded-full ${uiColor.dot}"></div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-bold text-slate-800 truncate">${data.bairro}</p>
+                            <p class="text-xs text-slate-400">${data.regiao}</p>
+                        </div>
+                        <div class="text-right flex-shrink-0">
+                            <p class="text-2xl font-extrabold ${uiColor.text} leading-none count-number">0</p>
+                            <p class="text-[10px] text-slate-400 font-medium mt-1">leads</p>
+                        </div>
+                        <svg class="chevron-icon w-5 h-5 text-slate-300 transition-transform duration-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </div>
+                    <div class="accordion-content w-full text-sm text-slate-600"></div>
+                `;
+                
+                card.addEventListener('click', function() {
+                    const content = this.querySelector('.accordion-content');
+                    const chevron = this.querySelector('.chevron-icon');
+                    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+                        content.style.maxHeight = '0px';
+                        chevron.classList.remove('rotate-180');
+                    } else {
+                        content.style.maxHeight = content.scrollHeight + 'px';
+                        chevron.classList.add('rotate-180');
+                    }
+                });
+
+                listContainer.appendChild(card);
+                data.domMobileCard = card; 
+            });
+        }
+
+        // ==========================================
+        // LÓGICA UNIFICADA DE FILTROS E MODAL
+        // ==========================================
+        function changeRegionFilter(region) {
+            currentRegionFilter = region;
+            
+            const buttons = document.querySelectorAll('#filter-wrapper button');
+            buttons.forEach(b => b.className = "px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all");
+            
+            const btnMap = { 'all': 'f-all', 'Zona Norte': 'f-zn', 'Zona Oeste': 'f-zo', 'Zona Sudoeste': 'f-zsd', 'Centro': 'f-cc', 'Baixada': 'f-bx', 'Zona Sul': 'f-zs' };
+            const activeBtn = document.getElementById(btnMap[region]);
+            if(region === 'all') activeBtn.className = "px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-slate-900 text-white transition-all shadow-sm";
+            else activeBtn.className = `px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl ${colorsMap[region].dot} text-white transition-all shadow-sm`;
+
+            applyFilters();
+        }
+
+        function changeFunctionFilter(funcao) {
+            currentFunctionFilter = funcao;
+            applyFilters();
+        }
+
+        function toggleModalNomes() {
+            const modal = document.getElementById('modal-nomes-overlay');
+            const btn = document.getElementById('btn-ver-contatos');
+            modal.classList.toggle('hidden');
+            btn.classList.toggle('text-indigo-600');
+            btn.classList.toggle('text-slate-400');
+        }
+
+        function applyFilters() {
+            const centerTotalCard = document.getElementById('central-total-card');
+            let totalVisivelGeral = 0;
+            let modalHTML = '';
+
+            if (currentRegionFilter === 'all') {
+                centerTotalCard.classList.remove('opacity-0', 'scale-90', 'pointer-events-none');
+                centerTotalCard.classList.add('scale-100', 'opacity-100');
+            } else {
+                centerTotalCard.classList.remove('scale-100', 'opacity-100');
+                centerTotalCard.classList.add('opacity-0', 'scale-90', 'pointer-events-none');
+            }
+
+            geoDatabase.forEach(data => {
+                let nomesFiltrados = (currentFunctionFilter === 'all') 
+                    ? data.nomes.map(n => n.nome) 
+                    : data.nomes.filter(n => n.funcao === currentFunctionFilter).map(n => n.nome);
+
+                let quantidade = nomesFiltrados.length;
+                let isRegiaoValida = (currentRegionFilter === 'all' || data.regiao === currentRegionFilter);
+
+                if (quantidade > 0 && isRegiaoValida) {
+                    totalVisivelGeral += quantidade;
+                    const uiColor = colorsMap[data.regiao];
+
+                    data.domLabel.innerHTML = `
+                        <span class="text-2xl font-extrabold leading-none tracking-tight">${quantidade}</span>
+                        <span class="text-[9px] font-bold uppercase tracking-wider opacity-80 block mt-0.5">${data.bairro}</span>
+                    `;
+                    data.domPoint.classList.remove('is-filtered-out');
+                    data.domLabel.classList.remove('is-filtered-out');
+                    data.domLine.style.opacity = '0.7';
+
+                    if (data.domMobileCard) {
+                        data.domMobileCard.classList.remove('is-hidden-mobile');
+                        data.domMobileCard.querySelector('.count-number').innerText = quantidade;
+                        
+                        let nomesListaHTML = nomesFiltrados.map(n => `<p class="py-1 border-b border-slate-100 last:border-0">• ${n}</p>`).join('');
+                        let contentDiv = data.domMobileCard.querySelector('.accordion-content');
+                        contentDiv.innerHTML = `<div class="pt-3 mt-3 border-t border-slate-100"><div class="flex flex-col">${nomesListaHTML}</div></div>`;
+                        
+                        contentDiv.style.maxHeight = '0px';
+                        data.domMobileCard.querySelector('.chevron-icon').classList.remove('rotate-180');
+                    }
+
+                    modalHTML += `
+                        <div class="bg-white/70 p-4 rounded-xl border border-slate-200/80">
+                            <h3 class="font-bold text-slate-800 mb-3 flex items-center justify-between">
+                                <span>${data.bairro}</span>
+                                <span class="text-xs font-medium px-2 py-0.5 rounded-full ${uiColor.dot} bg-opacity-10 ${uiColor.text}">${quantidade}</span>
+                            </h3>
+                            <div class="flex flex-col text-sm text-slate-600 max-h-40 overflow-y-auto pr-1">
+                                ${nomesFiltrados.map(n => `<span class="py-1">• ${n}</span>`).join('')}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    data.domPoint.classList.add('is-filtered-out');
+                    data.domLabel.classList.add('is-filtered-out');
+                    data.domLine.style.opacity = '0.05';
+                    if (data.domMobileCard) {
+                        data.domMobileCard.classList.add('is-hidden-mobile');
+                    }
+                }
+            });
+
+            document.getElementById('txt-total-count').innerText = totalVisivelGeral.toLocaleString('pt-BR');
+            document.getElementById('mobile-total-count').innerText = totalVisivelGeral.toLocaleString('pt-BR');
+
+            const modalContent = document.getElementById('modal-nomes-content');
+            if (totalVisivelGeral === 0) {
+                modalContent.innerHTML = `<div class="col-span-full text-center text-slate-400 py-10">Nenhum contato encontrado para os filtros selecionados.</div>`;
+            } else {
+                modalContent.innerHTML = modalHTML;
+            }
+        }
+
+        // ==========================================
+        // INICIALIZAÇÃO COM CACHE
+        // ==========================================
+        window.onload = () => { 
+            // 1. Tenta carregar do Cache Instantaneamente
+            const cachedData = localStorage.getItem('painel_rj_cache');
+            const cachedFuncoes = localStorage.getItem('painel_rj_funcoes');
+            
+            if (cachedData && cachedFuncoes) {
+                try {
+                    geoDatabase = JSON.parse(cachedData);
+                    allFunctionsList = new Set(JSON.parse(cachedFuncoes));
+                    
+                    const selectFuncoes = document.getElementById('function-filter');
+                    allFunctionsList.forEach(funcao => {
+                        let option = document.createElement('option');
+                        option.value = funcao;
+                        option.innerText = funcao;
+                        selectFuncoes.appendChild(option);
+                    });
+
+                    initMap();
+                    initMobileList(); 
+                    applyFilters(); 
+                } catch(e) {
+                    console.error("Erro ao ler cache", e);
+                }
+            }
+
+            // 2. Busca dados novos na nuvem (atualiza a tela se conseguir)
+            fetchSpreadsheetData(); 
+        };
+    </script>
+</body>
+</html>
