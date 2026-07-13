@@ -142,14 +142,14 @@
 
     <div class="w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col canvas-container relative">
         
-        <!-- CABEÇALHO DESKTOP (Hidden no Mobile) -->
-        <header class="hidden md:flex w-full bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 py-3 md:py-4 justify-between items-start z-50 gap-3 flex-shrink-0">
+        <!-- CABEÇALHO DESKTOP (Alinhamento Corrigido) -->
+        <header class="hidden md:flex w-full bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 py-3 md:py-4 justify-between items-center z-50 gap-3 flex-shrink-0">
             <div class="flex flex-col gap-2">
+                <span class="text-[10px] font-bold tracking-widest text-indigo-600 uppercase desktop-only">Distribuição GeoAnalítica</span>
+                
+                <!-- TÍTULO E ÍCONE NA MESMA LINHA -->
                 <div class="flex items-center gap-2">
-                    <div>
-                        <span class="text-[10px] font-bold tracking-widest text-indigo-600 uppercase desktop-only">Distribuição GeoAnalítica</span>
-                        <h1 class="text-base md:text-xl font-bold text-slate-900 tracking-tight">Mapa de Lideranças</h1>
-                    </div>
+                    <h1 class="text-base md:text-xl font-bold text-slate-900 tracking-tight">Mapa de Lideranças</h1>
                     
                     <!-- BOTÃO MODAL CONTATOS (DESKTOP) -->
                     <button id="btn-ver-contatos" onclick="toggleModalNomes()" class="flex items-center justify-center w-9 h-9 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="Ver Contatos">
@@ -169,7 +169,7 @@
             </div>
 
             <!-- BOTÕES DE FILTRO DE REGIÃO DESKTOP -->
-            <div class="flex flex-wrap gap-1.5" id="filter-wrapper">
+            <div class="flex flex-wrap gap-1.5 justify-end" id="filter-wrapper">
                 <button onclick="changeRegionFilter('all')" id="f-all" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-slate-900 text-white transition-all shadow-sm">Todos</button>
                 <button onclick="changeRegionFilter('Zona Norte')" id="f-zn" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Norte</button>
                 <button onclick="changeRegionFilter('Zona Oeste')" id="f-zo" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Oeste</button>
@@ -318,7 +318,7 @@
             "Gardênia": {x: 42, y: 55, regiao: "Zona Sudoeste"}, "Gardenia": {x: 42, y: 55, regiao: "Zona Sudoeste"},
             "Sulacap": {x: 32, y: 52, regiao: "Zona Sudoeste"},
             "Taquara": {x: 38, y: 62, regiao: "Zona Sudoeste"}, 
-            "Bangu": {x: 15, y: 36, regiao: "Zona Sudoeste"}, 
+            "Bangu": {x: 15, y: 36, regiao: "Zona Sudoeste"}, "Bangú": {x: 15, y: 36, regiao: "Zona Sudoeste"}, 
             "Curicica": {x: 34, y: 68, regiao: "Zona Sudoeste"},
             "Guaratiba": {x: 10, y: 65, regiao: "Zona Sudoeste"},
             "Cidade de Deus": {x: 36, y: 60, textX: 30, textY: 70, regiao: "Zona Sudoeste"},
