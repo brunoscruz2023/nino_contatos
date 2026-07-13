@@ -73,11 +73,13 @@
         @media (max-width: 767px) {
             body {
                 background-color: #ffffff;
+                padding: 0 !important;
             }
             
             .canvas-container {
                 aspect-ratio: unset !important;
-                max-width: 100% !important;
+                max-width: 100vw !important;
+                width: 100vw !important;
                 height: 100vh;
                 height: 100dvh;
                 border-radius: 0 !important;
@@ -86,7 +88,7 @@
             }
 
             .map-wrapper-mobile {
-                height: 45%;
+                height: 40%;
                 border-bottom: 1px solid #e2e8f0;
             }
 
@@ -114,7 +116,7 @@
             }
 
             .mobile-list-container {
-                height: 55%;
+                height: 60%;
                 overflow-y: auto;
                 background: #f8fafc;
                 -webkit-overflow-scrolling: touch;
@@ -140,40 +142,33 @@
 
     <div class="w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col canvas-container relative">
         
-        <!-- CABEÇALHO -->
-        <header class="w-full bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 py-3 md:py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center z-50 gap-3 flex-shrink-0">
+        <!-- CABEÇALHO DESKTOP (Hidden no Mobile) -->
+        <header class="hidden md:flex w-full bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 py-3 md:py-4 justify-between items-start z-50 gap-3 flex-shrink-0">
             <div class="flex flex-col gap-2">
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2">
                     <div>
                         <span class="text-[10px] font-bold tracking-widest text-indigo-600 uppercase desktop-only">Distribuição GeoAnalítica</span>
-                        <h1 class="text-base md:text-xl font-bold text-slate-900 tracking-tight">Mapa de Lideranças <span class="md:hidden text-slate-400 font-normal text-sm">(RJ)</span></h1>
+                        <h1 class="text-base md:text-xl font-bold text-slate-900 tracking-tight">Mapa de Lideranças</h1>
                     </div>
                     
                     <!-- BOTÃO MODAL CONTATOS (DESKTOP) -->
-                    <button id="btn-ver-contatos" onclick="toggleModalNomes()" class="hidden md:flex items-center justify-center w-9 h-9 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="Ver Contatos">
+                    <button id="btn-ver-contatos" onclick="toggleModalNomes()" class="flex items-center justify-center w-9 h-9 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="Ver Contatos">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path> <circle cx="9" cy="7" r="4"></circle> <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path> <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
                     </button>
                 </div>
                 
-                <!-- FILTRO DE FUNÇÃO -->
-                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                <!-- FILTRO DE FUNÇÃO DESKTOP -->
+                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 w-fit">
                     <span class="text-xs text-slate-500 font-medium">Função:</span>
-                    <select id="function-filter" onchange="changeFunctionFilter(this.value)" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer">
+                    <select id="desktop-function-filter" onchange="changeFunctionFilter(this.value)" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer">
                         <option value="all">Todas</option>
                     </select>
                 </div>
             </div>
 
-            <!-- Contador Mobile -->
-            <div id="mobile-header-count" class="md:hidden flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
-                <span class="text-xs text-slate-500 font-medium">Total:</span>
-                <span id="mobile-total-count" class="text-lg font-black text-slate-900 leading-none">0</span>
-                <span id="mobile-status-text" class="text-[9px] font-medium text-sky-500 ml-1 animate-pulse">Sincronizando</span>
-            </div>
-
-            <!-- BOTÕES DE FILTRO DE REGIÃO -->
+            <!-- BOTÕES DE FILTRO DE REGIÃO DESKTOP -->
             <div class="flex flex-wrap gap-1.5" id="filter-wrapper">
                 <button onclick="changeRegionFilter('all')" id="f-all" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-slate-900 text-white transition-all shadow-sm">Todos</button>
                 <button onclick="changeRegionFilter('Zona Norte')" id="f-zn" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Norte</button>
@@ -182,6 +177,33 @@
                 <button onclick="changeRegionFilter('Centro')" id="f-cc" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Centro</button>
                 <button onclick="changeRegionFilter('Baixada')" id="f-bx" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Baixada</button>
                 <button onclick="changeRegionFilter('Zona Sul')" id="f-zs" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Sul</button>
+            </div>
+        </header>
+
+        <!-- CABEÇALHO MOBILE (Layout Otimizado) -->
+        <header class="md:hidden flex flex-col items-center justify-center w-full py-4 px-4 gap-1 bg-white border-b border-slate-100 z-50 flex-shrink-0">
+            <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight text-center leading-tight">Mapa de Lideranças <span class="font-normal text-slate-400 text-lg">(RJ)</span></h1>
+            
+            <!-- KPI Total -->
+            <span id="mobile-total-count" class="text-2xl font-black text-slate-900 leading-none mt-1">0</span>
+            
+            <!-- Status -->
+            <span id="mobile-status-text" class="text-[10px] font-medium text-sky-500 animate-pulse mb-3">Sincronizando</span>
+
+            <!-- Filtros Mobile (Grid 2 Colunas) -->
+            <div class="grid grid-cols-2 gap-2 w-full">
+                <select id="mobile-region-filter" onchange="changeRegionFilter(this.value)" class="bg-slate-50 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer border border-slate-200 rounded-lg py-2 px-2 text-center">
+                    <option value="all">Todas as Regiões</option>
+                    <option value="Zona Norte">Zona Norte</option>
+                    <option value="Zona Oeste">Zona Oeste</option>
+                    <option value="Zona Sudoeste">Zona Sudoeste</option>
+                    <option value="Centro">Centro</option>
+                    <option value="Baixada">Baixada</option>
+                    <option value="Zona Sul">Zona Sul</option>
+                </select>
+                <select id="function-filter" onchange="changeFunctionFilter(this.value)" class="bg-slate-50 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer border border-slate-200 rounded-lg py-2 px-2 text-center">
+                    <option value="all">Todas as Funções</option>
+                </select>
             </div>
         </header>
 
@@ -418,24 +440,22 @@
             const mobileStatusEl = document.getElementById('mobile-status-text');
             
             if (geoDatabase.length > 0) {
-                // Se já tem dados (cache), avisa modo offline
                 if(statusEl) {
                     statusEl.innerText = "Modo Offline (Cache)";
                     statusEl.className = "text-xs font-semibold text-rose-500 mt-1";
                 }
                 if(mobileStatusEl) {
                     mobileStatusEl.innerText = "Offline";
-                    mobileStatusEl.className = "text-[9px] font-medium text-rose-500 ml-1";
+                    mobileStatusEl.className = "text-[10px] font-medium text-rose-500";
                 }
             } else {
-                // Se não tem cache, avisa erro
                 if(statusEl) {
                     statusEl.innerText = "Erro ao carregar dados";
                     statusEl.className = "text-xs font-semibold text-rose-500 mt-1";
                 }
                 if(mobileStatusEl) {
                     mobileStatusEl.innerText = "Erro";
-                    mobileStatusEl.className = "text-[9px] font-medium text-rose-500 ml-1";
+                    mobileStatusEl.className = "text-[10px] font-medium text-rose-500";
                 }
             }
         }
@@ -449,7 +469,7 @@
             }
             if(mobileStatusEl) {
                 mobileStatusEl.innerText = "Sincronizando";
-                mobileStatusEl.className = "text-[9px] font-medium text-sky-500 ml-1 animate-pulse";
+                mobileStatusEl.className = "text-[10px] font-medium text-sky-500 animate-pulse";
             }
 
             const script = document.createElement('script');
@@ -458,14 +478,32 @@
             script.onerror = handleFetchError;
             document.body.appendChild(script);
 
-            // Timeout de segurança reduzido para 7 segundos para testes mais rápidos
             fetchTimeout = setTimeout(handleFetchError, 7000);
+        }
+
+        function populateFunctionFilters() {
+            const selectFuncoesMobile = document.getElementById('function-filter');
+            const selectFuncoesDesktop = document.getElementById('desktop-function-filter');
+            
+            selectFuncoesMobile.innerHTML = '<option value="all">Todas as Funções</option>';
+            selectFuncoesDesktop.innerHTML = '<option value="all">Todas</option>';
+
+            allFunctionsList.forEach(funcao => {
+                let opt1 = document.createElement('option');
+                opt1.value = funcao;
+                opt1.innerText = funcao;
+                selectFuncoesMobile.appendChild(opt1);
+                
+                let opt2 = document.createElement('option');
+                opt2.value = funcao;
+                opt2.innerText = funcao;
+                selectFuncoesDesktop.appendChild(opt2);
+            });
         }
 
         window.processarRetornoPlanilha = function(json) {
             clearTimeout(fetchTimeout);
             
-            // Validação básica da resposta
             if (!json || !json.table || !json.table.rows) {
                 handleFetchError();
                 return;
@@ -504,15 +542,7 @@
                 bairroAgrupamento[nomeRealDoBairro].nomes.push({ nome: nomeContato, funcao: valorFuncao });
             });
 
-            const selectFuncoes = document.getElementById('function-filter');
-            // Limpa opções antigas exceto a primeira (Todas)
-            selectFuncoes.innerHTML = '<option value="all">Todas</option>';
-            allFunctionsList.forEach(funcao => {
-                let option = document.createElement('option');
-                option.value = funcao;
-                option.innerText = funcao;
-                selectFuncoes.appendChild(option);
-            });
+            populateFunctionFilters();
 
             for (let bairro in bairroAgrupamento) {
                 let dadosBairro = bairroAgrupamento[bairro];
@@ -529,13 +559,11 @@
                 });
             }
 
-            // Salva no Cache (Local Storage)
             try {
                 localStorage.setItem('painel_rj_cache', JSON.stringify(geoDatabase));
                 localStorage.setItem('painel_rj_funcoes', JSON.stringify(Array.from(allFunctionsList)));
             } catch(e) { console.error("Erro ao salvar cache", e); }
 
-            // Atualiza status para Sucesso (Tempo Real)
             const statusEl = document.getElementById('status-text');
             const mobileStatusEl = document.getElementById('mobile-status-text');
             if(statusEl) {
@@ -544,7 +572,7 @@
             }
             if(mobileStatusEl) {
                 mobileStatusEl.innerText = "Online";
-                mobileStatusEl.className = "text-[9px] font-medium text-emerald-500 ml-1";
+                mobileStatusEl.className = "text-[10px] font-medium text-emerald-500";
             }
 
             initMap();
@@ -649,6 +677,11 @@
         function changeRegionFilter(region) {
             currentRegionFilter = region;
             
+            // Atualiza Dropdown Mobile
+            const mobileSelect = document.getElementById('mobile-region-filter');
+            if(mobileSelect) mobileSelect.value = region;
+            
+            // Atualiza Botões Desktop
             const buttons = document.querySelectorAll('#filter-wrapper button');
             buttons.forEach(b => b.className = "px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all");
             
@@ -754,7 +787,6 @@
         // INICIALIZAÇÃO COM CACHE
         // ==========================================
         window.onload = () => { 
-            // 1. Tenta carregar do Cache Instantaneamente
             const cachedData = localStorage.getItem('painel_rj_cache');
             const cachedFuncoes = localStorage.getItem('painel_rj_funcoes');
             
@@ -763,13 +795,7 @@
                     geoDatabase = JSON.parse(cachedData);
                     allFunctionsList = new Set(JSON.parse(cachedFuncoes));
                     
-                    const selectFuncoes = document.getElementById('function-filter');
-                    allFunctionsList.forEach(funcao => {
-                        let option = document.createElement('option');
-                        option.value = funcao;
-                        option.innerText = funcao;
-                        selectFuncoes.appendChild(option);
-                    });
+                    populateFunctionFilters();
 
                     initMap();
                     initMobileList(); 
@@ -779,7 +805,6 @@
                 }
             }
 
-            // 2. Busca dados novos na nuvem (atualiza a tela se conseguir)
             fetchSpreadsheetData(); 
         };
     </script>
