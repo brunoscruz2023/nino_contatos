@@ -88,7 +88,9 @@
             }
 
             .map-wrapper-mobile {
-                height: 40%;
+                width: 100%;
+                aspect-ratio: 1414 / 780;
+                flex-shrink: 0;
                 border-bottom: 1px solid #e2e8f0;
             }
 
@@ -102,21 +104,22 @@
             }
 
             .map-point {
-                width: 16px;
-                height: 16px;
-                border: 2px solid #ffffff;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                width: 10px;
+                height: 10px;
+                border: 1.5px solid #ffffff;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
                 animation: pulse-point 2s infinite;
             }
 
             @keyframes pulse-point {
                 0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); }
-                70% { box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); }
+                70% { box-shadow: 0 0 0 6px rgba(100, 116, 139, 0); }
                 100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); }
             }
 
             .mobile-list-container {
-                height: 60%;
+                flex: 1;
+                min-height: 0;
                 overflow-y: auto;
                 background: #f8fafc;
                 -webkit-overflow-scrolling: touch;
@@ -156,7 +159,7 @@
     <div class="w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col canvas-container relative">
         
         <!-- CABEÇALHO DESKTOP -->
-        <header class="hidden md:flex w-full bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 py-3 md:py-4 justify-between items-center z-50 gap-3 flex-shrink-0">
+        <header class="hidden md:flex w-full bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 py-3 md:py-4 justify-between items-start z-50 gap-3 flex-shrink-0">
             <div class="flex flex-col gap-2">
                 <span class="text-[10px] font-bold tracking-widest text-indigo-600 uppercase desktop-only">Distribuição GeoAnalítica</span>
                 
@@ -168,16 +171,9 @@
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path> <circle cx="9" cy="7" r="4"></circle> <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path> <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
                     </button>
-
-                    <button onclick="logout()" class="flex items-center justify-center w-9 h-9 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all" title="Sair">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line>
-                        </svg>
-                    </button>
                 </div>
                 
                 <div class="flex items-center gap-4 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 w-fit">
-                    <!-- FILTRO EQUIPE (DESKTOP) -->
                     <div id="desktop-team-wrapper" class="hidden items-center gap-1">
                         <span class="text-xs text-slate-500 font-medium">Equipe:</span>
                         <select id="desktop-team-filter" onchange="changeTeamFilter(this.value)" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer">
@@ -193,35 +189,64 @@
                 </div>
             </div>
 
-            <div class="flex flex-wrap gap-1.5 justify-end" id="filter-wrapper">
-                <button onclick="changeRegionFilter('all')" id="f-all" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-slate-900 text-white transition-all shadow-sm">Todos</button>
-                <button onclick="changeRegionFilter('Zona Norte')" id="f-zn" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Norte</button>
-                <button onclick="changeRegionFilter('Zona Oeste')" id="f-zo" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Oeste</button>
-                <button onclick="changeRegionFilter('Zona Sudoeste')" id="f-zsd" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Sudoeste</button>
-                <button onclick="changeRegionFilter('Centro')" id="f-cc" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Centro</button>
-                <button onclick="changeRegionFilter('Baixada')" id="f-bx" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Baixada</button>
-                <button onclick="changeRegionFilter('Zona Sul')" id="f-zs" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Sul</button>
-            </div>
-        </header>
-
-        <!-- CABEÇALHO MOBILE -->
-        <header class="md:hidden flex flex-col items-center justify-center w-full py-4 px-4 gap-1 bg-white border-b border-slate-100 z-50 flex-shrink-0">
-            <div class="flex items-center gap-2 absolute top-4 right-4">
-                <button onclick="toggleModalNomes()" class="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-indigo-600 transition-all">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path> <circle cx="9" cy="7" r="4"></circle> <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path> <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                    </svg>
-                </button>
-                <button onclick="logout()" class="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-rose-600 transition-all">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <div class="flex flex-col items-end gap-3">
+                <button onclick="logout()" class="flex items-center justify-center w-9 h-9 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all" title="Sair">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line>
                     </svg>
                 </button>
+                <div class="flex flex-wrap gap-1.5 justify-end" id="filter-wrapper">
+                    <button onclick="changeRegionFilter('all')" id="f-all" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-slate-900 text-white transition-all shadow-sm">Todos</button>
+                    <button onclick="changeRegionFilter('Zona Norte')" id="f-zn" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Norte</button>
+                    <button onclick="changeRegionFilter('Zona Oeste')" id="f-zo" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Oeste</button>
+                    <button onclick="changeRegionFilter('Zona Sudoeste')" id="f-zsd" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Sudoeste</button>
+                    <button onclick="changeRegionFilter('Centro')" id="f-cc" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Centro</button>
+                    <button onclick="changeRegionFilter('Baixada')" id="f-bx" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Baixada</button>
+                    <button onclick="changeRegionFilter('Zona Sul')" id="f-zs" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Sul</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- CABEÇALHO MOBILE (com Menu Kebab) -->
+        <header class="md:hidden relative flex flex-col w-full pt-5 pb-4 px-4 gap-1 bg-white border-b border-slate-100 z-50 flex-shrink-0">
+            
+            <!-- Overlay transparente para fechar o menu ao clicar fora -->
+            <div id="kebab-overlay" onclick="toggleKebabMenu()" class="hidden fixed inset-0 z-[55]"></div>
+
+            <!-- Menu Kebab Popover -->
+            <div class="absolute top-4 right-4 z-[56]">
+                <button id="kebab-btn" onclick="toggleKebabMenu()" class="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 5v.01M12 12v.01M12 19v.01"></path></svg>
+                </button>
+                
+                <div id="kebab-menu" class="hidden absolute right-0 mt-2 w-44 glass-base rounded-xl shadow-xl border border-white/60 py-1.5 flex flex-col overflow-hidden">
+                    
+                    <!-- Opção Em Breve (Sem funcionalidade ativa) -->
+                    <div class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-400 w-full cursor-default">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        Em breve
+                    </div>
+                    
+                    <div class="border-t border-slate-200/60 my-1.5"></div>
+                    
+                    <button onclick="logout()" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-rose-600 hover:bg-rose-50/80 transition-colors text-left w-full">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                        Sair
+                    </button>
+                </div>
             </div>
 
             <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight text-center leading-tight">Mapa de Lideranças <span class="font-normal text-slate-400 text-lg">(RJ)</span></h1>
-            <span id="mobile-total-count" class="text-2xl font-black text-slate-900 leading-none mt-1">0</span>
-            <span id="mobile-status-text" class="text-[10px] font-medium text-sky-500 animate-pulse mb-3">Aguardando Login</span>
+            <span id="mobile-total-count" class="text-2xl font-black text-slate-900 leading-none mt-1 text-center">0</span>
+            <span id="mobile-status-text" class="text-[10px] font-medium text-sky-500 animate-pulse mb-3 text-center">Aguardando Login</span>
 
             <div class="grid grid-cols-2 gap-2 w-full">
                 <select id="mobile-region-filter" onchange="changeRegionFilter(this.value)" class="bg-slate-50 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer border border-slate-200 rounded-lg py-2 px-2 text-center">
@@ -238,7 +263,6 @@
                 </select>
             </div>
 
-            <!-- FILTRO EQUIPE (MOBILE) -->
             <div id="mobile-team-wrapper" class="hidden w-full mt-2">
                 <select id="mobile-team-filter" onchange="changeTeamFilter(this.value)" class="w-full bg-slate-50 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer border border-slate-200 rounded-lg py-2 px-2 text-center">
                     <option value="all">Todas as Equipes</option>
@@ -249,7 +273,7 @@
         <!-- ÁREA DO MAPA -->
         <div class="map-wrapper-mobile flex-1 relative w-full overflow-hidden bg-slate-50 select-none">
             <div class="absolute inset-0 z-0 opacity-80 pointer-events-none">
-                <svg viewBox="0 0 1414 780" class="w-full h-full object-cover" xmlns="http://www.w3.org/2000/svg">
+                <svg viewBox="0 0 1414 780" preserveAspectRatio="none" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
                     <rect width="1414" height="780" fill="#f8fafc" />
                     <path d="M 0 620 Q 180 640 280 780 L 0 780 Z" fill="#e2e8f0" />
                     <path d="M 1120 0 Q 1060 220 1260 380 Q 1340 330 1414 360 L 1414 0 Z" fill="#e2e8f0" />
@@ -274,7 +298,7 @@
             <svg class="svg-lines-layer" id="svg-lines-layer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
             <div id="map-bounds" class="absolute inset-0 z-20 overflow-hidden"></div>
 
-            <!-- MODAL NOMES -->
+            <!-- MODAL NOMES (Apenas Desktop) -->
             <div id="modal-nomes-overlay" class="absolute inset-0 z-[60] hidden p-4 md:p-8">
                 <div class="w-full h-full glass-base rounded-2xl flex flex-col p-6 relative border border-white/60 shadow-2xl">
                     <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-200/60">
@@ -476,6 +500,16 @@
         };
 
         // ==========================================
+        // FUNÇÕES DE UI (Kebab e Modal)
+        // ==========================================
+        function toggleKebabMenu() {
+            const menu = document.getElementById('kebab-menu');
+            const overlay = document.getElementById('kebab-overlay');
+            menu.classList.toggle('hidden');
+            overlay.classList.toggle('hidden');
+        }
+
+        // ==========================================
         // FUNÇÕES DE SESSÃO E LOGIN
         // ==========================================
         function fetchJsonp(url, callbackName) {
@@ -623,7 +657,6 @@
                 selectFuncoesDesktop.appendChild(opt2);
             });
 
-            // Preenche filtro de Equipe e verifica visibilidade
             const selectTeamMobile = document.getElementById('mobile-team-filter');
             const selectTeamDesktop = document.getElementById('desktop-team-filter');
             const wrapperMobile = document.getElementById('mobile-team-wrapper');
@@ -632,7 +665,6 @@
             selectTeamMobile.innerHTML = '<option value="all">Todas as Equipes</option>';
             selectTeamDesktop.innerHTML = '<option value="all">Todas</option>';
             
-            // Só mostra o seletor de equipes se o usuário tiver acesso a TODAS
             if (currentSession && currentSession.teams.includes("TODAS")) {
                 wrapperMobile.classList.remove('hidden');
                 wrapperDesktop.classList.remove('hidden');
@@ -717,7 +749,6 @@
                 });
             }
 
-            // Salva no Cache ISOLADO por chave
             try {
                 localStorage.setItem(`painel_cache_${currentSession.key}`, JSON.stringify(geoDatabase));
                 localStorage.setItem(`painel_funcoes_${currentSession.key}`, JSON.stringify(Array.from(allFunctionsList)));
@@ -859,7 +890,6 @@
         function changeTeamFilter(team) {
             currentTeamFilter = team;
             
-            // Sincroniza os dois selects (mobile e desktop)
             const mobileSelect = document.getElementById('mobile-team-filter');
             const desktopSelect = document.getElementById('desktop-team-filter');
             if(mobileSelect) mobileSelect.value = team;
@@ -890,7 +920,6 @@
             }
 
             geoDatabase.forEach(data => {
-                // Aplica filtro de função e equipe na lista de nomes
                 let nomesFiltrados = data.nomes.filter(n => {
                     let funcaoValida = (currentFunctionFilter === 'all' || n.funcao === currentFunctionFilter);
                     let equipeValida = (currentTeamFilter === 'all' || n.equipe === currentTeamFilter);
