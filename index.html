@@ -163,14 +163,12 @@
                 <div class="flex items-center gap-2">
                     <h1 class="text-base md:text-xl font-bold text-slate-900 tracking-tight">Mapa de Lideranças</h1>
                     
-                    <!-- BOTÃO CONTATOS -->
                     <button id="btn-ver-contatos" onclick="toggleModalNomes()" class="flex items-center justify-center w-9 h-9 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="Ver Contatos">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path> <circle cx="9" cy="7" r="4"></circle> <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path> <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
                     </button>
 
-                    <!-- BOTÃO LOGOUT -->
                     <button onclick="logout()" class="flex items-center justify-center w-9 h-9 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all" title="Sair">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line>
@@ -178,11 +176,20 @@
                     </button>
                 </div>
                 
-                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 w-fit">
-                    <span class="text-xs text-slate-500 font-medium">Função:</span>
-                    <select id="desktop-function-filter" onchange="changeFunctionFilter(this.value)" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer">
-                        <option value="all">Todas</option>
-                    </select>
+                <div class="flex items-center gap-4 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 w-fit">
+                    <!-- FILTRO EQUIPE (DESKTOP) -->
+                    <div id="desktop-team-wrapper" class="hidden items-center gap-1">
+                        <span class="text-xs text-slate-500 font-medium">Equipe:</span>
+                        <select id="desktop-team-filter" onchange="changeTeamFilter(this.value)" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer">
+                            <option value="all">Todas</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-slate-500 font-medium">Função:</span>
+                        <select id="desktop-function-filter" onchange="changeFunctionFilter(this.value)" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer">
+                            <option value="all">Todas</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -228,6 +235,13 @@
                 </select>
                 <select id="function-filter" onchange="changeFunctionFilter(this.value)" class="bg-slate-50 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer border border-slate-200 rounded-lg py-2 px-2 text-center">
                     <option value="all">Todas as Funções</option>
+                </select>
+            </div>
+
+            <!-- FILTRO EQUIPE (MOBILE) -->
+            <div id="mobile-team-wrapper" class="hidden w-full mt-2">
+                <select id="mobile-team-filter" onchange="changeTeamFilter(this.value)" class="w-full bg-slate-50 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer border border-slate-200 rounded-lg py-2 px-2 text-center">
+                    <option value="all">Todas as Equipes</option>
                 </select>
             </div>
         </header>
@@ -300,9 +314,11 @@
         let geoDatabase = [];
         let currentRegionFilter = 'all';
         let currentFunctionFilter = 'all';
+        let currentTeamFilter = 'all';
         let allFunctionsList = new Set();
+        let allTeamsList = new Set();
         let fetchTimeout;
-        let currentSession = null; // { key: 'admin', teams: ['TODAS'] }
+        let currentSession = null;
 
         const geoDicionario = {
             // --- BAIXADA ---
@@ -318,7 +334,7 @@
             "Japeri": {x: 22, y: 10, regiao: "Baixada"},
             "Paracambi": {x: 15, y: 12, regiao: "Baixada"},
             "Serpentina": {x: 65, y: 8, regiao: "Baixada"},
-            "Cachoeira de Macacu": {x: 98, y: 5, textX: 90, textY: 12, regiao: "Baixada"}, // Adicionado
+            "Cachoeira de Macacu": {x: 98, y: 5, textX: 90, textY: 12, regiao: "Baixada"}, 
 
             // --- ZONA OESTE ---
             "Magalhães Bastos": {x: 30, y: 40, regiao: "Zona Oeste"}, "Magalhaes Bastos": {x: 30, y: 40, regiao: "Zona Oeste"},
@@ -357,10 +373,10 @@
             // --- ZONA NORTE ---
             "Penha": {x: 82, y: 38, textX: 92, textY: 44, regiao: "Zona Norte"},
             "Vila da Penha": {x: 82, y: 38, textX: 92, textY: 44, regiao: "Zona Norte"},
-            "Maré": {x: 76, y: 30, textX: 88, textY: 24, regiao: "Zona Norte"}, // Adicionado
-            "Cordovil": {x: 72, y: 26, textX: 82, textY: 20, regiao: "Zona Norte"}, // Adicionado
-            "Éden": {x: 70, y: 24, textX: 60, textY: 18, regiao: "Zona Norte"}, // Adicionado
-            "Jardim América": {x: 74, y: 24, textX: 64, textY: 16, regiao: "Zona Norte"}, // Adicionado
+            "Maré": {x: 76, y: 30, textX: 88, textY: 24, regiao: "Zona Norte"}, 
+            "Cordovil": {x: 72, y: 26, textX: 82, textY: 20, regiao: "Zona Norte"}, 
+            "Éden": {x: 70, y: 24, textX: 60, textY: 18, regiao: "Zona Norte"}, 
+            "Jardim América": {x: 74, y: 24, textX: 64, textY: 16, regiao: "Zona Norte"}, 
             "Deodoro": {x: 38, y: 36, textX: 25, textY: 30, regiao: "Zona Norte"}, 
             "Ricardo de Albuquerque": {x: 44, y: 32, textX: 35, textY: 22, regiao: "Zona Norte"}, 
             "Anchieta": {x: 41, y: 26, textX: 30, textY: 16, regiao: "Zona Norte"}, 
@@ -393,7 +409,7 @@
             "Pavuna": {x: 56, y: 21, textX: 50, textY: 8, regiao: "Zona Norte"}, 
             "Pilares": {x: 62, y: 39, textX: 68, textY: 24, regiao: "Zona Norte"}, 
             "Quintino": {x: 56, y: 51, textX: 45, textY: 66, regiao: "Zona Norte"},
-            "Quintino Bocaiúva": {x: 56, y: 51, textX: 45, textY: 66, regiao: "Zona Norte"}, // Adicionado
+            "Quintino Bocaiúva": {x: 56, y: 51, textX: 45, textY: 66, regiao: "Zona Norte"}, 
             "São Francisco Xavier": {x: 72, y: 48, textX: 65, textY: 40, regiao: "Zona Norte"},
             "Irajá": {x: 60, y: 30, regiao: "Zona Norte"},
             "Colégio": {x: 58, y: 28, regiao: "Zona Norte"},
@@ -492,7 +508,7 @@
                 if (data && data.table && data.table.rows) {
                     data.table.rows.forEach(row => {
                         if (row.c[0] && row.c[0].v) {
-                            if (row.c[0].v === key) { // Case Sensitive exato
+                            if (row.c[0].v === key) { 
                                 foundTeams = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "";
                             }
                         }
@@ -501,7 +517,7 @@
 
                 if (foundTeams !== null) {
                     let teamsArray = foundTeams.toUpperCase().split(',').map(t => t.trim()).filter(t => t.length > 0);
-                    if (teamsArray.length === 0) teamsArray = ["TODAS"]; // Fallback
+                    if (teamsArray.length === 0) teamsArray = ["TODAS"]; 
                     
                     currentSession = { key: key, teams: teamsArray };
                     sessionStorage.setItem('painel_session', JSON.stringify(currentSession));
@@ -525,6 +541,7 @@
             if (currentSession) {
                 localStorage.removeItem(`painel_cache_${currentSession.key}`);
                 localStorage.removeItem(`painel_funcoes_${currentSession.key}`);
+                localStorage.removeItem(`painel_equipes_${currentSession.key}`);
             }
             location.reload();
         }
@@ -587,7 +604,7 @@
             }
         }
 
-        function populateFunctionFilters() {
+        function populateFilters() {
             const selectFuncoesMobile = document.getElementById('function-filter');
             const selectFuncoesDesktop = document.getElementById('desktop-function-filter');
             
@@ -605,6 +622,38 @@
                 opt2.innerText = funcao;
                 selectFuncoesDesktop.appendChild(opt2);
             });
+
+            // Preenche filtro de Equipe e verifica visibilidade
+            const selectTeamMobile = document.getElementById('mobile-team-filter');
+            const selectTeamDesktop = document.getElementById('desktop-team-filter');
+            const wrapperMobile = document.getElementById('mobile-team-wrapper');
+            const wrapperDesktop = document.getElementById('desktop-team-wrapper');
+            
+            selectTeamMobile.innerHTML = '<option value="all">Todas as Equipes</option>';
+            selectTeamDesktop.innerHTML = '<option value="all">Todas</option>';
+            
+            // Só mostra o seletor de equipes se o usuário tiver acesso a TODAS
+            if (currentSession && currentSession.teams.includes("TODAS")) {
+                wrapperMobile.classList.remove('hidden');
+                wrapperDesktop.classList.remove('hidden');
+                wrapperDesktop.classList.add('flex');
+                
+                allTeamsList.forEach(team => {
+                    let opt1 = document.createElement('option');
+                    opt1.value = team;
+                    opt1.innerText = team;
+                    selectTeamMobile.appendChild(opt1);
+                    
+                    let opt2 = document.createElement('option');
+                    opt2.value = team;
+                    opt2.innerText = team;
+                    selectTeamDesktop.appendChild(opt2);
+                });
+            } else {
+                wrapperMobile.classList.add('hidden');
+                wrapperDesktop.classList.add('hidden');
+                wrapperDesktop.classList.remove('flex');
+            }
         }
 
         function processarRetornoPlanilha(json) {
@@ -618,6 +667,7 @@
             geoDatabase = [];
             const bairroAgrupamento = {}; 
             allFunctionsList = new Set(); 
+            allTeamsList = new Set();
             
             const mapaBusca = Object.keys(geoDicionario).reduce((acc, bairro) => {
                 acc[bairro.toLowerCase()] = bairro;
@@ -631,8 +681,10 @@
                 
                 let valorFuncao = row.c[4] && row.c[4].v ? row.c[4].v.toString().trim() : "Não definida";
                 let nomeContato = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "Não informado";
+                let valorEquipe = row.c[5] && row.c[5].v ? row.c[5].v.toString().trim() : "Não definida";
                 
                 allFunctionsList.add(valorFuncao);
+                allTeamsList.add(valorEquipe);
 
                 let textoFormatado = valorBairro.trim().toLowerCase();
                 if (!mapaBusca[textoFormatado]) return;
@@ -645,10 +697,10 @@
                 
                 bairroAgrupamento[nomeRealDoBairro].total++;
                 bairroAgrupamento[nomeRealDoBairro].funcoes[valorFuncao] = (bairroAgrupamento[nomeRealDoBairro].funcoes[valorFuncao] || 0) + 1;
-                bairroAgrupamento[nomeRealDoBairro].nomes.push({ nome: nomeContato, funcao: valorFuncao });
+                bairroAgrupamento[nomeRealDoBairro].nomes.push({ nome: nomeContato, funcao: valorFuncao, equipe: valorEquipe });
             });
 
-            populateFunctionFilters();
+            populateFilters();
 
             for (let bairro in bairroAgrupamento) {
                 let dadosBairro = bairroAgrupamento[bairro];
@@ -669,6 +721,7 @@
             try {
                 localStorage.setItem(`painel_cache_${currentSession.key}`, JSON.stringify(geoDatabase));
                 localStorage.setItem(`painel_funcoes_${currentSession.key}`, JSON.stringify(Array.from(allFunctionsList)));
+                localStorage.setItem(`painel_equipes_${currentSession.key}`, JSON.stringify(Array.from(allTeamsList)));
             } catch(e) { console.error("Erro ao salvar cache", e); }
 
             const statusEl = document.getElementById('status-text');
@@ -803,6 +856,18 @@
             applyFilters();
         }
 
+        function changeTeamFilter(team) {
+            currentTeamFilter = team;
+            
+            // Sincroniza os dois selects (mobile e desktop)
+            const mobileSelect = document.getElementById('mobile-team-filter');
+            const desktopSelect = document.getElementById('desktop-team-filter');
+            if(mobileSelect) mobileSelect.value = team;
+            if(desktopSelect) desktopSelect.value = team;
+            
+            applyFilters();
+        }
+
         function toggleModalNomes() {
             const modal = document.getElementById('modal-nomes-overlay');
             const btn = document.getElementById('btn-ver-contatos');
@@ -825,9 +890,12 @@
             }
 
             geoDatabase.forEach(data => {
-                let nomesFiltrados = (currentFunctionFilter === 'all') 
-                    ? data.nomes.map(n => n.nome) 
-                    : data.nomes.filter(n => n.funcao === currentFunctionFilter).map(n => n.nome);
+                // Aplica filtro de função e equipe na lista de nomes
+                let nomesFiltrados = data.nomes.filter(n => {
+                    let funcaoValida = (currentFunctionFilter === 'all' || n.funcao === currentFunctionFilter);
+                    let equipeValida = (currentTeamFilter === 'all' || n.equipe === currentTeamFilter);
+                    return funcaoValida && equipeValida;
+                }).map(n => n.nome);
 
                 let quantidade = nomesFiltrados.length;
                 let isRegiaoValida = (currentRegionFilter === 'all' || data.regiao === currentRegionFilter);
@@ -905,13 +973,15 @@
 
             const cachedData = localStorage.getItem(`painel_cache_${currentSession.key}`);
             const cachedFuncoes = localStorage.getItem(`painel_funcoes_${currentSession.key}`);
+            const cachedEquipes = localStorage.getItem(`painel_equipes_${currentSession.key}`);
             
-            if (cachedData && cachedFuncoes) {
+            if (cachedData && cachedFuncoes && cachedEquipes) {
                 try {
                     geoDatabase = JSON.parse(cachedData);
                     allFunctionsList = new Set(JSON.parse(cachedFuncoes));
+                    allTeamsList = new Set(JSON.parse(cachedEquipes));
                     
-                    populateFunctionFilters();
+                    populateFilters();
                     initMap();
                     initMobileList(); 
                     applyFilters(); 
@@ -930,9 +1000,7 @@
                 document.getElementById('login-overlay').style.display = 'none';
                 initApp();
             } else {
-                // Foca no input automaticamente
                 document.getElementById('key-input').focus();
-                // Permite login apertando Enter
                 document.getElementById('key-input').addEventListener('keypress', function (e) {
                     if (e.key === 'Enter') {
                         performLogin();
