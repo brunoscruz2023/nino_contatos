@@ -452,6 +452,10 @@
             "Andaraí": {x: 75, y: 54, regiao: "Zona Norte"}, "Andarai": {x: 75, y: 54, regiao: "Zona Norte"},
             "Rocha Miranda": {x: 52, y: 35, regiao: "Zona Norte"},
             "Souto": {x: 50, y: 38, regiao: "Zona Norte"},
+            // NOVOS BAIRROS ADICIONADOS
+            "Tijuca": {x: 70, y: 50, textX: 60, textY: 42, regiao: "Zona Norte"},
+            "Vila Cosmos": {x: 45, y: 22, textX: 35, textY: 14, regiao: "Zona Norte"},
+            "Tomas Coelho": {x: 68, y: 20, textX: 58, textY: 10, regiao: "Zona Norte"},
 
             // --- CENTRO ---
             "Estácio / Centro": {x: 84, y: 48, regiao: "Centro"}, "Estacio / Centro": {x: 84, y: 48, regiao: "Centro"},
@@ -706,8 +710,12 @@
                 return acc;
             }, {});
 
-            json.table.rows.forEach(row => {
-                if (!row.c || !row.c[0]) return; 
+            json.table.rows.forEach((row, index) => {
+                if (!row.c || !row.c[0] || !row.c[0].v) {
+                    console.warn(`Linha ${index + 2} ignorada: Coluna A (Bairro) está vazia.`);
+                    return; 
+                }
+                
                 let valorBairro = row.c[0].v;
                 if (typeof valorBairro !== 'string') return; 
                 
@@ -719,7 +727,10 @@
                 allTeamsList.add(valorEquipe);
 
                 let textoFormatado = valorBairro.trim().toLowerCase();
-                if (!mapaBusca[textoFormatado]) return;
+                if (!mapaBusca[textoFormatado]) {
+                    console.warn(`Linha ${index + 2} ignorada: Bairro "${valorBairro}" não encontrado no geoDicionario.`);
+                    return;
+                }
 
                 let nomeRealDoBairro = mapaBusca[textoFormatado];
                 
