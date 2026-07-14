@@ -70,6 +70,12 @@
             transition: max-height 0.3s ease-out;
         }
 
+        /* Oculta ícones nativos de senha do navegador */
+        input::-ms-reveal,
+        input::-ms-clear {
+            display: none;
+        }
+
         @media (max-width: 767px) {
             body {
                 background-color: #ffffff;
@@ -91,7 +97,6 @@
                 overflow-x: hidden !important;
             }
 
-            /* Cabeçalho Fixo no topo */
             .mobile-header-sticky {
                 position: sticky !important;
                 top: 0 !important;
@@ -100,10 +105,9 @@
                 box-shadow: 0 4px 10px rgba(0,0,0,0.03);
             }
 
-            /* Mapa Sticky que colapsa */
             .map-wrapper-mobile {
                 position: sticky !important;
-                top: 35px !important; /* Congela o mapa escondendo ~60% dele sob o cabeçalho */
+                top: 35px !important; 
                 z-index: 40 !important;
                 width: 100%;
                 aspect-ratio: 1414 / 780;
@@ -111,7 +115,6 @@
                 margin-top: -1px !important;
             }
 
-            /* Efeito de Fade (Borda de Vidro) na parte inferior do mapa */
             .map-wrapper-mobile::after {
                 content: '';
                 position: absolute;
@@ -144,13 +147,12 @@
                 100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); }
             }
 
-            /* Lista rolando por baixo do mapa */
             .mobile-list-container {
                 position: relative !important;
                 z-index: 30 !important;
                 background-color: #f8fafc !important;
                 padding: 1rem !important;
-                min-height: 70vh !important; /* Garante espaço para rolar bem */
+                min-height: 70vh !important; 
                 padding-bottom: 4rem !important;
             }
 
@@ -179,7 +181,16 @@
                 <h2 class="text-2xl font-bold text-slate-900">Acesso Restrito</h2>
                 <p class="text-sm text-slate-500 mt-1">Digite sua chave de acesso para visualizar o painel.</p>
             </div>
-            <input type="password" id="key-input" placeholder="Sua chave..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center font-bold tracking-widest text-slate-800 bg-white/70">
+            
+            <!-- Contêiner relativo para o input e o ícone do olho -->
+            <div class="relative w-full">
+                <input type="password" id="key-input" placeholder="Sua chave..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center font-bold tracking-widest text-slate-800 bg-white/70">
+                <button type="button" id="eye-btn" onclick="togglePasswordVisibility()" class="hidden absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-slate-600 transition-opacity" title="Mostrar/Esconder chave">
+                    <svg id="eye-icon-show" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg id="eye-icon-hide" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+                </button>
+            </div>
+
             <button onclick="performLogin()" class="w-full bg-slate-900 text-white py-2.5 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg">Entrar</button>
             <p id="login-error" class="text-rose-500 text-sm text-center hidden">Chave inválida. Tente novamente.</p>
         </div>
@@ -232,25 +243,23 @@
                     <button onclick="changeRegionFilter('Centro')" id="f-cc" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Centro</button>
                     <button onclick="changeRegionFilter('Baixada')" id="f-bx" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Baixada</button>
                     <button onclick="changeRegionFilter('Zona Sul')" id="f-zs" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Z. Sul</button>
+                    <button onclick="changeRegionFilter('Região Leste')" id="f-rl" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">R. Leste</button>
+                    <button onclick="changeRegionFilter('Interior')" id="f-int" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">Interior</button>
                 </div>
             </div>
         </header>
 
-        <!-- CABEÇALHO MOBILE (Adicionada classe mobile-header-sticky) -->
+        <!-- CABEÇALHO MOBILE -->
         <header class="md:hidden mobile-header-sticky relative flex flex-col w-full pt-5 pb-4 px-4 gap-1 bg-white border-b border-slate-100 z-50 flex-shrink-0">
             
-            <!-- Overlay transparente para fechar o menu ao clicar fora -->
             <div id="kebab-overlay" onclick="toggleKebabMenu()" class="hidden fixed inset-0 z-[55]"></div>
 
-            <!-- Menu Kebab Popover -->
             <div class="absolute top-4 right-4 z-[56]">
                 <button id="kebab-btn" onclick="toggleKebabMenu()" class="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all">
                     <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 5v.01M12 12v.01M12 19v.01"></path></svg>
                 </button>
                 
                 <div id="kebab-menu" class="hidden absolute right-0 mt-2 w-44 glass-base rounded-xl shadow-xl border border-white/60 py-1.5 flex flex-col overflow-hidden">
-                    
-                    <!-- Opção Em Breve (Sem funcionalidade ativa) -->
                     <div class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-400 w-full cursor-default">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -286,6 +295,8 @@
                     <option value="Centro">Centro</option>
                     <option value="Baixada">Baixada</option>
                     <option value="Zona Sul">Zona Sul</option>
+                    <option value="Região Leste">Região Leste</option>
+                    <option value="Interior">Interior</option>
                 </select>
                 <select id="function-filter" onchange="changeFunctionFilter(this.value)" class="bg-slate-50 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer border border-slate-200 rounded-lg py-2 px-2 text-center">
                     <option value="all">Todas as Funções</option>
@@ -316,7 +327,6 @@
                 </svg>
             </div>
 
-            <!-- Card Central -->
             <div id="central-total-card" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-72 h-72 rounded-full glass-base flex flex-col justify-center items-center text-center border-2 border-indigo-500/20 shadow-xl pointer-events-none scale-100 opacity-100">
                 <span class="text-[11px] font-extrabold uppercase tracking-widest text-indigo-600">Volume Amostral</span>
                 <span id="txt-total-count" class="text-7xl font-black text-slate-900 tracking-tighter my-2 animate-pulse">0</span>
@@ -327,7 +337,6 @@
             <svg class="svg-lines-layer" id="svg-lines-layer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
             <div id="map-bounds" class="absolute inset-0 z-20 overflow-hidden"></div>
 
-            <!-- MODAL NOMES (Apenas Desktop) -->
             <div id="modal-nomes-overlay" class="absolute inset-0 z-[60] hidden p-4 md:p-8">
                 <div class="w-full h-full glass-base rounded-2xl flex flex-col p-6 relative border border-white/60 shadow-2xl">
                     <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-200/60">
@@ -341,19 +350,20 @@
             </div>
         </div>
 
-        <!-- LISTA MOBILE -->
         <div class="mobile-list-container md:hidden">
             <div id="mobile-list-content" class="flex flex-col gap-2.5"></div>
         </div>
 
         <footer class="desktop-only w-full bg-white border-t border-slate-100 px-8 py-2.5 flex justify-between items-center z-40 text-[11px] text-slate-400">
-            <div class="flex gap-4">
+            <div class="flex gap-4 flex-wrap">
                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-sky-400"></span> Zona Norte</span>
                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Zona Oeste</span>
                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-violet-400"></span> Zona Sudoeste</span>
                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-indigo-400"></span> Centro</span>
                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400"></span> Baixada</span>
                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-400"></span> Zona Sul</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400"></span> Região Leste</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-400"></span> Interior</span>
             </div>
             <div class="font-medium">Navegação Dinâmica Homologada</div>
         </footer>
@@ -402,6 +412,7 @@
             "Inhoaíba": {x: 8, y: 45, regiao: "Zona Oeste"},
             "Cosmos": {x: 15, y: 60, regiao: "Zona Oeste"},
             "Camorim": {x: 20, y: 70, regiao: "Zona Oeste"},
+            "Padre Miguel": {x: 28, y: 46, textX: 22, textY: 54, regiao: "Zona Oeste"}, 
 
             // --- ZONA SUDOESTE ---
             "Realengo": {x: 20, y: 42, regiao: "Zona Sudoeste"},
@@ -450,7 +461,7 @@
             "Água Santa": {x: 58, y: 53, textX: 60, textY: 66, regiao: "Zona Norte"}, 
             "Cascadura": {x: 54, y: 47, textX: 30, textY: 60, regiao: "Zona Norte"}, 
             "Encantado": {x: 63, y: 46, textX: 75, textY: 48, regiao: "Zona Norte"}, 
-            "Engenho da Rainha": {x: 59, y: 33, textX: 65, textY: 16, regiao: "Zona Norte"}, 
+            "Engenho da Rainna": {x: 59, y: 33, textX: 65, textY: 16, regiao: "Zona Norte"}, 
             "Fazenda Botafogo": {x: 53, y: 26, textX: 42, textY: 16, regiao: "Zona Norte"}, 
             "Honório Gurgel": {x: 48, y: 34, textX: 25, textY: 36, regiao: "Zona Norte"}, 
             "Inhaúma": {x: 64, y: 38, textX: 72, textY: 30, regiao: "Zona Norte"}, "Inhauma": {x: 64, y: 38, textX: 72, textY: 30, regiao: "Zona Norte"},
@@ -481,10 +492,10 @@
             "Andaraí": {x: 75, y: 54, regiao: "Zona Norte"}, "Andarai": {x: 75, y: 54, regiao: "Zona Norte"},
             "Rocha Miranda": {x: 52, y: 35, regiao: "Zona Norte"},
             "Souto": {x: 50, y: 38, regiao: "Zona Norte"},
-            // NOVOS BAIRROS
             "Tijuca": {x: 70, y: 50, textX: 60, textY: 42, regiao: "Zona Norte"},
             "Vila Cosmos": {x: 45, y: 22, textX: 35, textY: 14, regiao: "Zona Norte"},
-            "Thomas Coelho": {x: 68, y: 20, textX: 58, textY: 10, regiao: "Zona Norte"},
+            "Tomas Coelho": {x: 68, y: 20, textX: 58, textY: 10, regiao: "Zona Norte"}, 
+            "Cidade Alta": {x: 78, y: 28, textX: 88, textY: 22, regiao: "Zona Norte"}, 
 
             // --- CENTRO ---
             "Estácio / Centro": {x: 84, y: 48, regiao: "Centro"}, "Estacio / Centro": {x: 84, y: 48, regiao: "Centro"},
@@ -516,7 +527,20 @@
             "Laranjeiras": {x: 77, y: 68, textX: 65, textY: 64, regiao: "Zona Sul"},
             "Botafogo": {x: 80, y: 72, textX: 90, textY: 75, regiao: "Zona Sul"},
             "Flamengo": {x: 75, y: 65, textX: 65, textY: 70, regiao: "Zona Sul"},
-            "Humaitá": {x: 76, y: 72, textX: 68, textY: 78, regiao: "Zona Sul"}, "Humaita": {x: 76, y: 72, textX: 68, textY: 78, regiao: "Zona Sul"}
+            "Humaitá": {x: 76, y: 72, textX: 68, textY: 78, regiao: "Zona Sul"}, "Humaita": {x: 76, y: 72, textX: 68, textY: 78, regiao: "Zona Sul"},
+
+            // --- REGIÃO LESTE ---
+            "Niterói": {x: 95, y: 38, textX: 92, textY: 48, regiao: "Região Leste"}, "Niteroi": {x: 95, y: 38, textX: 92, textY: 48, regiao: "Região Leste"},
+            "São Gonçalo": {x: 98, y: 30, textX: 95, textY: 22, regiao: "Região Leste"}, "Sao Goncalo": {x: 98, y: 30, textX: 95, textY: 22, regiao: "Região Leste"},
+            "Itaboraí": {x: 99, y: 15, textX: 92, textY: 8, regiao: "Região Leste"}, "Itaborai": {x: 99, y: 15, textX: 92, textY: 8, regiao: "Região Leste"},
+            "Tanguá": {x: 92, y: 5, textX: 85, textY: 12, regiao: "Região Leste"}, "Tangua": {x: 92, y: 5, textX: 85, textY: 12, regiao: "Região Leste"},
+            "Guapimirim": {x: 80, y: 8, textX: 75, textY: 2, regiao: "Região Leste"},
+
+            // --- INTERIOR ---
+            "Angra dos Reis": {x: 2, y: 98, textX: 10, textY: 96, regiao: "Interior"},
+            "Volta Redonda": {x: 5, y: 95, textX: 12, textY: 92, regiao: "Interior"},
+            "Barra do Piraí": {x: 2, y: 88, textX: 10, textY: 86, regiao: "Interior"}, "Barra do Pirai": {x: 2, y: 88, textX: 10, textY: 86, regiao: "Interior"},
+            "Miguel Pereira": {x: 2, y: 80, textX: 10, textY: 78, regiao: "Interior"}
         };
 
         const colorsMap = {
@@ -525,21 +549,39 @@
             "Zona Sudoeste": { text: "text-violet-600", dot: "bg-violet-500", border: "border-violet-400" },
             "Centro": { text: "text-indigo-600", dot: "bg-indigo-500", border: "border-indigo-400" },
             "Baixada": { text: "text-amber-600", dot: "bg-amber-500", border: "border-amber-400" },
-            "Zona Sul": { text: "text-rose-600", dot: "bg-rose-500", border: "border-rose-400" }
+            "Zona Sul": { text: "text-rose-600", dot: "bg-rose-500", border: "border-rose-400" },
+            "Região Leste": { text: "text-cyan-600", dot: "bg-cyan-500", border: "border-cyan-400" },
+            "Interior": { text: "text-slate-600", dot: "bg-slate-500", border: "border-slate-400" }
         };
 
         const svgStrokeColors = {
-            "Zona Norte": "#38bdf8", "Zona Oeste": "#34d399", "Zona Sudoeste": "#8b5cf6", "Centro": "#818cf8", "Baixada": "#fbbf24", "Zona Sul": "#fb7185"
+            "Zona Norte": "#38bdf8", "Zona Oeste": "#34d399", "Zona Sudoeste": "#8b5cf6", "Centro": "#818cf8", "Baixada": "#fbbf24", "Zona Sul": "#fb7185",
+            "Região Leste": "#22d3ee", "Interior": "#64748b"
         };
 
         // ==========================================
-        // FUNÇÕES DE UI (Kebab e Modal)
+        // FUNÇÕES DE UI (Kebab, Modal e Senha)
         // ==========================================
         function toggleKebabMenu() {
             const menu = document.getElementById('kebab-menu');
             const overlay = document.getElementById('kebab-overlay');
             menu.classList.toggle('hidden');
             overlay.classList.toggle('hidden');
+        }
+
+        function togglePasswordVisibility() {
+            const input = document.getElementById('key-input');
+            const iconShow = document.getElementById('eye-icon-show');
+            const iconHide = document.getElementById('eye-icon-hide');
+            if (input.type === 'password') {
+                input.type = 'text';
+                iconShow.classList.add('hidden');
+                iconHide.classList.remove('hidden');
+            } else {
+                input.type = 'password';
+                iconShow.classList.remove('hidden');
+                iconHide.classList.add('hidden');
+            }
         }
 
         // ==========================================
@@ -914,7 +956,7 @@
             const buttons = document.querySelectorAll('#filter-wrapper button');
             buttons.forEach(b => b.className = "px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all");
             
-            const btnMap = { 'all': 'f-all', 'Zona Norte': 'f-zn', 'Zona Oeste': 'f-zo', 'Zona Sudoeste': 'f-zsd', 'Centro': 'f-cc', 'Baixada': 'f-bx', 'Zona Sul': 'f-zs' };
+            const btnMap = { 'all': 'f-all', 'Zona Norte': 'f-zn', 'Zona Oeste': 'f-zo', 'Zona Sudoeste': 'f-zsd', 'Centro': 'f-cc', 'Baixada': 'f-bx', 'Zona Sul': 'f-zs', 'Região Leste': 'f-rl', 'Interior': 'f-int' };
             const activeBtn = document.getElementById(btnMap[region]);
             if(region === 'all') activeBtn.className = "px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-slate-900 text-white transition-all shadow-sm";
             else activeBtn.className = `px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl ${colorsMap[region].dot} text-white transition-all shadow-sm`;
@@ -1069,10 +1111,25 @@
                 document.getElementById('login-overlay').style.display = 'none';
                 initApp();
             } else {
-                document.getElementById('key-input').focus();
-                document.getElementById('key-input').addEventListener('keypress', function (e) {
+                const keyInput = document.getElementById('key-input');
+                const eyeBtn = document.getElementById('eye-btn');
+                
+                keyInput.focus();
+                keyInput.addEventListener('keypress', function (e) {
                     if (e.key === 'Enter') {
                         performLogin();
+                    }
+                });
+                
+                // Exibe o ícone de olho apenas quando algo for digitado
+                keyInput.addEventListener('input', function() {
+                    if (this.value.length > 0) {
+                        eyeBtn.classList.remove('hidden');
+                    } else {
+                        eyeBtn.classList.add('hidden');
+                        this.type = 'password';
+                        document.getElementById('eye-icon-show').classList.remove('hidden');
+                        document.getElementById('eye-icon-hide').classList.add('hidden');
                     }
                 });
             }
