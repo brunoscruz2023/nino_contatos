@@ -27,7 +27,6 @@ function parseCustomDate(dateInput) {
     if (dateStr.startsWith('Date(')) {
         const match = dateStr.match(/Date\((\d+),(\d+),(\d+)/);
         if (match) {
-            // O gviz usa mês 0-11 (janeiro é 0), igual ao JS. Então não precisa subtrair 1.
             const d = new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]));
             d.setHours(0, 0, 0, 0);
             return d;
@@ -265,10 +264,20 @@ async function fetchSpreadsheetData() {
     }
 
     try {
-        let query = "SELECT *";
+        // Mapeamento de colunas por nível de segurança
+        // TOTAL: A, B, C, D, E, F, G
+        // CARD:  A, B, D, E, F, G (omite telefone)
+        // ZAP:   A, B, C, E, F, G (omite referência)
+        // NOME:  A, B, E, F, G
+        let queryCols = "A, B, E, F, G";
+        if (currentSession.nivel === 'TOTAL') queryCols = "A, B, C, D, E, F, G";
+        if (currentSession.nivel === 'CARD') queryCols = "A, B, D, E, F, G";
+        if (currentSession.nivel === 'ZAP') queryCols = "A, B, C, E, F, G";
+        
+        let query = `SELECT ${queryCols}`;
         if (currentSession && !currentSession.teams.includes("TODAS")) {
             let conditions = currentSession.teams.map(team => `F = '${team}'`).join(' OR ');
-            query = `SELECT * WHERE ${conditions}`;
+            query += ` WHERE ${conditions}`;
         }
         
         const encodedQuery = encodeURIComponent(query);
@@ -308,13 +317,40 @@ function processarRetornoPlanilha(json) {
         let valorBairro = row.c[0].v;
         if (typeof valorBairro !== 'string') return; 
         
-        let valorFuncao = row.c[4] && row.c[4].v ? row.c[4].v.toString().trim() : "Não definida";
         let nomeContato = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "Não informado";
-        let valorEquipe = row.c[5] && row.c[5].v ? row.c[5].v.toString().trim() : "Não definida";
-        let valorData = row.c[6] && row.c[6].v ? row.c[6].v : ""; // Pode vir como Date Object ou String
         
-        allFunctionsList.add(valorFuncao);
-        allTeamsList.add(valorEquipe);
+        let fone = "";
+        let ref = "";
+        let funcao = "";
+        let equipe = "";
+        let data = "";
+
+        // Mapeamento dinâmico de índices baseado no nível
+        let idx = 2;
+        if (currentSession.nivel === 'TOTAL') {
+            fone = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().replace(/\D/g, '') : ""; idx++; // Sanitiza telefone
+            ref = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : ""; idx++;
+            funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
+            equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
+            data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
+        } else if (currentSession.nivel === 'CARD') {
+            ref = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : ""; idx++;
+            funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
+            equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
+            data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
+        } else if (currentSession.nivel === 'ZAP') {
+            fone = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().replace(/\D/g, '') : ""; idx++; // Sanitiza telefone
+            funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
+            equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
+            data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
+        } else {
+            funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
+            equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
+            data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
+        }
+        
+        allFunctionsList.add(funcao);
+        allTeamsList.add(equipe);
 
         let textoFormatado = valorBairro.trim().toLowerCase();
         if (!mapaBusca[textoFormatado]) {
@@ -329,8 +365,8 @@ function processarRetornoPlanilha(json) {
         }
         
         bairroAgrupamento[nomeRealDoBairro].total++;
-        bairroAgrupamento[nomeRealDoBairro].funcoes[valorFuncao] = (bairroAgrupamento[nomeRealDoBairro].funcoes[valorFuncao] || 0) + 1;
-        bairroAgrupamento[nomeRealDoBairro].nomes.push({ nome: nomeContato, funcao: valorFuncao, equipe: valorEquipe, data: valorData });
+        bairroAgrupamento[nomeRealDoBairro].funcoes[funcao] = (bairroAgrupamento[nomeRealDoBairro].funcoes[funcao] || 0) + 1;
+        bairroAgrupamento[nomeRealDoBairro].nomes.push({ nome: nomeContato, funcao: funcao, equipe: equipe, data: data, fone: fone, ref: ref });
     });
 
     populateFilters();
@@ -350,10 +386,11 @@ function processarRetornoPlanilha(json) {
         });
     }
 
+    const cacheSuffix = currentSession.nivel || 'default';
     try {
-        localStorage.setItem(`painel_cache_${currentSession.key}`, JSON.stringify(geoDatabase));
-        localStorage.setItem(`painel_funcoes_${currentSession.key}`, JSON.stringify(Array.from(allFunctionsList)));
-        localStorage.setItem(`painel_equipes_${currentSession.key}`, JSON.stringify(Array.from(allTeamsList)));
+        localStorage.setItem(`painel_cache_${currentSession.key}_${cacheSuffix}`, JSON.stringify(geoDatabase));
+        localStorage.setItem(`painel_funcoes_${currentSession.key}_${cacheSuffix}`, JSON.stringify(Array.from(allFunctionsList)));
+        localStorage.setItem(`painel_equipes_${currentSession.key}_${cacheSuffix}`, JSON.stringify(Array.from(allTeamsList)));
     } catch(e) { console.error("Erro ao salvar cache", e); }
 
     const statusEl = document.getElementById('status-text');
