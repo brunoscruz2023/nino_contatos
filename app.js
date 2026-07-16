@@ -1,0 +1,430 @@
+let currentRegionFilter = 'all';
+let currentFunctionFilter = 'all';
+let currentTeamFilter = 'all';
+
+function toggleKebabMenu() {
+    const menu = document.getElementById('kebab-menu');
+    const overlay = document.getElementById('kebab-overlay');
+    menu.classList.toggle('hidden');
+    overlay.classList.toggle('hidden');
+}
+
+function togglePasswordVisibility() {
+    const input = document.getElementById('key-input');
+    const iconShow = document.getElementById('eye-icon-show');
+    const iconHide = document.getElementById('eye-icon-hide');
+    if (input.type === 'password') {
+        input.type = 'text';
+        iconShow.classList.add('hidden');
+        iconHide.classList.remove('hidden');
+    } else {
+        input.type = 'password';
+        iconShow.classList.remove('hidden');
+        iconHide.classList.add('hidden');
+    }
+}
+
+async function performLogin() {
+    const keyInput = document.getElementById('key-input');
+    const errorEl = document.getElementById('login-error');
+    const key = keyInput.value;
+    
+    if (!key) return;
+    errorEl.classList.add('hidden');
+
+    try {
+        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:cb_acessos&sheet=${encodeURIComponent(ACESSOS_SHEET_NAME)}`;
+        const data = await fetchJsonp(url, 'cb_acessos');
+        
+        let foundTeams = null;
+        if (data && data.table && data.table.rows) {
+            data.table.rows.forEach(row => {
+                if (row.c[0] && row.c[0].v) {
+                    if (row.c[0].v === key) { 
+                        foundTeams = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "";
+                    }
+                }
+            });
+        }
+
+        if (foundTeams !== null) {
+            let teamsArray = foundTeams.toUpperCase().split(',').map(t => t.trim()).filter(t => t.length > 0);
+            if (teamsArray.length === 0) teamsArray = ["TODAS"]; 
+            
+            currentSession = { key: key, teams: teamsArray };
+            sessionStorage.setItem('painel_session', JSON.stringify(currentSession));
+            
+            document.getElementById('login-overlay').style.display = 'none';
+            keyInput.value = '';
+            
+            initApp();
+        } else {
+            errorEl.innerText = "Chave inválida. Tente novamente.";
+            errorEl.classList.remove('hidden');
+        }
+    } catch (e) {
+        errorEl.innerText = "Erro de conexão. Verifique sua internet e tente novamente.";
+        errorEl.classList.remove('hidden');
+    }
+}
+
+function logout() {
+    sessionStorage.removeItem('painel_session');
+    if (currentSession) {
+        localStorage.removeItem(`painel_cache_${currentSession.key}`);
+        localStorage.removeItem(`painel_funcoes_${currentSession.key}`);
+        localStorage.removeItem(`painel_equipes_${currentSession.key}`);
+    }
+    location.reload();
+}
+
+function handleFetchError() {
+    clearTimeout(fetchTimeout);
+    const statusEl = document.getElementById('status-text');
+    const mobileStatusEl = document.getElementById('mobile-status-text');
+    
+    if (geoDatabase.length > 0) {
+        if(statusEl) {
+            statusEl.innerText = "Modo Offline (Cache)";
+            statusEl.className = "text-xs font-semibold text-rose-500 mt-1";
+        }
+        if(mobileStatusEl) {
+            mobileStatusEl.innerText = "Offline";
+            mobileStatusEl.className = "text-[10px] font-medium text-rose-500";
+        }
+    } else {
+        if(statusEl) {
+            statusEl.innerText = "Erro ao carregar dados";
+            statusEl.className = "text-xs font-semibold text-rose-500 mt-1";
+        }
+        if(mobileStatusEl) {
+            mobileStatusEl.innerText = "Erro";
+            mobileStatusEl.className = "text-[10px] font-medium text-rose-500";
+        }
+    }
+}
+
+function populateFilters() {
+    const selectFuncoesMobile = document.getElementById('function-filter');
+    const selectFuncoesDesktop = document.getElementById('desktop-function-filter');
+    
+    selectFuncoesMobile.innerHTML = '<option value="all">Todas as Funções</option>';
+    selectFuncoesDesktop.innerHTML = '<option value="all">Todas</option>';
+
+    allFunctionsList.forEach(funcao => {
+        let opt1 = document.createElement('option');
+        opt1.value = funcao;
+        opt1.innerText = funcao;
+        selectFuncoesMobile.appendChild(opt1);
+        
+        let opt2 = document.createElement('option');
+        opt2.value = funcao;
+        opt2.innerText = funcao;
+        selectFuncoesDesktop.appendChild(opt2);
+    });
+
+    const selectTeamMobile = document.getElementById('mobile-team-filter');
+    const selectTeamDesktop = document.getElementById('desktop-team-filter');
+    const wrapperMobile = document.getElementById('mobile-team-wrapper');
+    const wrapperDesktop = document.getElementById('desktop-team-wrapper');
+    
+    selectTeamMobile.innerHTML = '<option value="all">Todas as Equipes</option>';
+    selectTeamDesktop.innerHTML = '<option value="all">Todas</option>';
+    
+    if (currentSession && currentSession.teams.includes("TODAS")) {
+        wrapperMobile.classList.remove('hidden');
+        wrapperDesktop.classList.remove('hidden');
+        wrapperDesktop.classList.add('flex');
+        
+        allTeamsList.forEach(team => {
+            let opt1 = document.createElement('option');
+            opt1.value = team;
+            opt1.innerText = team;
+            selectTeamMobile.appendChild(opt1);
+            
+            let opt2 = document.createElement('option');
+            opt2.value = team;
+            opt2.innerText = team;
+            selectTeamDesktop.appendChild(opt2);
+        });
+    } else {
+        wrapperMobile.classList.add('hidden');
+        wrapperDesktop.classList.add('hidden');
+        wrapperDesktop.classList.remove('flex');
+    }
+}
+
+function getCalloutPath(x1, y1, x2, y2) {
+    return `M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}`;
+}
+
+function initMap() {
+    const container = document.getElementById('map-bounds');
+    const svgLayer = document.getElementById('svg-lines-layer');
+    container.innerHTML = '';
+    svgLayer.innerHTML = '';
+
+    geoDatabase.forEach((data) => {
+        const uiColor = colorsMap[data.regiao];
+        const strokeColor = svgStrokeColors[data.regiao];
+        const finalTextX = data.textX !== undefined ? data.textX : data.x + 4;
+        const finalTextY = data.textY !== undefined ? data.textY : data.y - 8;
+
+        const point = document.createElement('div');
+        point.className = `map-point ${uiColor.dot}`;
+        point.style.left = `${data.x}%`;
+        point.style.top = `${data.y}%`;
+        point.setAttribute('data-region', data.regiao);
+        container.appendChild(point);
+
+        const label = document.createElement('div');
+        label.className = `map-label ${uiColor.text}`;
+        label.style.left = `${finalTextX}%`;
+        label.style.top = `${finalTextY}%`;
+        label.setAttribute('data-region', data.regiao);
+        container.appendChild(label);
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', getCalloutPath(data.x, data.y, finalTextX, finalTextY));
+        path.setAttribute('stroke', strokeColor);
+        path.setAttribute('stroke-width', "0.25");
+        path.setAttribute('fill', 'none');
+        path.setAttribute('data-region', data.regiao);
+        svgLayer.appendChild(path);
+
+        data.domPoint = point;
+        data.domLabel = label;
+        data.domLine = path;
+    });
+}
+
+function initMobileList() {
+    const listContainer = document.getElementById('mobile-list-content');
+    listContainer.innerHTML = ''; 
+
+    geoDatabase.forEach(data => {
+        const uiColor = colorsMap[data.regiao];
+        const card = document.createElement('div');
+        card.className = 'mobile-lead-card bg-white p-4 rounded-2xl border border-slate-100 shadow-sm';
+        card.setAttribute('data-region', data.regiao);
+        
+        card.innerHTML = `
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl ${uiColor.dot} bg-opacity-10 flex items-center justify-center flex-shrink-0">
+                    <div class="w-3 h-3 rounded-full ${uiColor.dot}"></div>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-slate-800 truncate">${data.bairro}</p>
+                    <p class="text-xs text-slate-400">${data.regiao}</p>
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <p class="text-2xl font-extrabold ${uiColor.text} leading-none count-number">0</p>
+                    <p class="text-[10px] text-slate-400 font-medium mt-1">leads</p>
+                </div>
+                <svg class="chevron-icon w-5 h-5 text-slate-300 transition-transform duration-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path>
+                </svg>
+            </div>
+            <div class="accordion-content w-full text-sm text-slate-600"></div>
+        `;
+        
+        card.addEventListener('click', function() {
+            const content = this.querySelector('.accordion-content');
+            const chevron = this.querySelector('.chevron-icon');
+            if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+                content.style.maxHeight = '0px';
+                chevron.classList.remove('rotate-180');
+            } else {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                chevron.classList.add('rotate-180');
+            }
+        });
+
+        listContainer.appendChild(card);
+        data.domMobileCard = card; 
+    });
+}
+
+function changeRegionFilter(region) {
+    currentRegionFilter = region;
+    
+    const mobileSelect = document.getElementById('mobile-region-filter');
+    if(mobileSelect) mobileSelect.value = region;
+    
+    const buttons = document.querySelectorAll('#filter-wrapper button');
+    buttons.forEach(b => b.className = "px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all");
+    
+    const btnMap = { 'all': 'f-all', 'Zona Norte': 'f-zn', 'Zona Oeste': 'f-zo', 'Zona Sudoeste': 'f-zsd', 'Centro': 'f-cc', 'Baixada': 'f-bx', 'Zona Sul': 'f-zs', 'Região Leste': 'f-rl', 'Interior': 'f-int' };
+    const activeBtn = document.getElementById(btnMap[region]);
+    if(region === 'all') activeBtn.className = "px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-slate-900 text-white transition-all shadow-sm";
+    else activeBtn.className = `px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl ${colorsMap[region].dot} text-white transition-all shadow-sm`;
+
+    applyFilters();
+}
+
+function changeFunctionFilter(funcao) {
+    currentFunctionFilter = funcao;
+    applyFilters();
+}
+
+function changeTeamFilter(team) {
+    currentTeamFilter = team;
+    
+    const mobileSelect = document.getElementById('mobile-team-filter');
+    const desktopSelect = document.getElementById('desktop-team-filter');
+    if(mobileSelect) mobileSelect.value = team;
+    if(desktopSelect) desktopSelect.value = team;
+    
+    applyFilters();
+}
+
+function toggleModalNomes() {
+    const modal = document.getElementById('modal-nomes-overlay');
+    const btn = document.getElementById('btn-ver-contatos');
+    modal.classList.toggle('hidden');
+    btn.classList.toggle('text-indigo-600');
+    btn.classList.toggle('text-slate-400');
+}
+
+function applyFilters() {
+    const centerTotalCard = document.getElementById('central-total-card');
+    let totalVisivelGeral = 0;
+    let modalHTML = '';
+
+    if (currentRegionFilter === 'all') {
+        centerTotalCard.classList.remove('opacity-0', 'scale-90', 'pointer-events-none');
+        centerTotalCard.classList.add('scale-100', 'opacity-100');
+    } else {
+        centerTotalCard.classList.remove('scale-100', 'opacity-100');
+        centerTotalCard.classList.add('opacity-0', 'scale-90', 'pointer-events-none');
+    }
+
+    geoDatabase.forEach(data => {
+        let nomesFiltrados = data.nomes.filter(n => {
+            let funcaoValida = (currentFunctionFilter === 'all' || n.funcao === currentFunctionFilter);
+            let equipeValida = (currentTeamFilter === 'all' || n.equipe === currentTeamFilter);
+            return funcaoValida && equipeValida;
+        }).map(n => n.nome);
+
+        let quantidade = nomesFiltrados.length;
+        let isRegiaoValida = (currentRegionFilter === 'all' || data.regiao === currentRegionFilter);
+
+        if (quantidade > 0 && isRegiaoValida) {
+            totalVisivelGeral += quantidade;
+            const uiColor = colorsMap[data.regiao];
+
+            data.domLabel.innerHTML = `
+                <span class="text-2xl font-extrabold leading-none tracking-tight">${quantidade}</span>
+                <span class="text-[9px] font-bold uppercase tracking-wider opacity-80 block mt-0.5">${data.bairro}</span>
+            `;
+            data.domPoint.classList.remove('is-filtered-out');
+            data.domLabel.classList.remove('is-filtered-out');
+            data.domLine.style.opacity = '0.7';
+
+            if (data.domMobileCard) {
+                data.domMobileCard.classList.remove('is-hidden-mobile');
+                data.domMobileCard.querySelector('.count-number').innerText = quantidade;
+                
+                let nomesListaHTML = nomesFiltrados.map(n => `<p class="py-1 border-b border-slate-100 last:border-0">• ${n}</p>`).join('');
+                let contentDiv = data.domMobileCard.querySelector('.accordion-content');
+                contentDiv.innerHTML = `<div class="pt-3 mt-3 border-t border-slate-100"><div class="flex flex-col">${nomesListaHTML}</div></div>`;
+                
+                contentDiv.style.maxHeight = '0px';
+                data.domMobileCard.querySelector('.chevron-icon').classList.remove('rotate-180');
+            }
+
+            modalHTML += `
+                <div class="bg-white/70 p-4 rounded-xl border border-slate-200/80">
+                    <h3 class="font-bold text-slate-800 mb-3 flex items-center justify-between">
+                        <span>${data.bairro}</span>
+                        <span class="text-xs font-medium px-2 py-0.5 rounded-full ${uiColor.dot} bg-opacity-10 ${uiColor.text}">${quantidade}</span>
+                    </h3>
+                    <div class="flex flex-col text-sm text-slate-600 max-h-40 overflow-y-auto pr-1">
+                        ${nomesFiltrados.map(n => `<span class="py-1">• ${n}</span>`).join('')}
+                    </div>
+                </div>
+            `;
+        } else {
+            data.domPoint.classList.add('is-filtered-out');
+            data.domLabel.classList.add('is-filtered-out');
+            data.domLine.style.opacity = '0.05';
+            if (data.domMobileCard) {
+                data.domMobileCard.classList.add('is-hidden-mobile');
+            }
+        }
+    });
+
+    document.getElementById('txt-total-count').innerText = totalVisivelGeral.toLocaleString('pt-BR');
+    document.getElementById('mobile-total-count').innerText = totalVisivelGeral.toLocaleString('pt-BR');
+
+    const modalContent = document.getElementById('modal-nomes-content');
+    if (totalVisivelGeral === 0) {
+        modalContent.innerHTML = `<div class="col-span-full text-center text-slate-400 py-10">Nenhum contato encontrado para os filtros selecionados.</div>`;
+    } else {
+        modalContent.innerHTML = modalHTML;
+    }
+}
+
+function initApp() {
+    const statusEl = document.getElementById('status-text');
+    const mobileStatusEl = document.getElementById('mobile-status-text');
+    if(statusEl) {
+        statusEl.innerText = "Carregando dados...";
+        statusEl.className = "text-xs font-semibold text-sky-500 mt-1 animate-pulse";
+    }
+    if(mobileStatusEl) {
+        mobileStatusEl.innerText = "Carregando";
+        mobileStatusEl.className = "text-[10px] font-medium text-sky-500 animate-pulse";
+    }
+
+    const cachedData = localStorage.getItem(`painel_cache_${currentSession.key}`);
+    const cachedFuncoes = localStorage.getItem(`painel_funcoes_${currentSession.key}`);
+    const cachedEquipes = localStorage.getItem(`painel_equipes_${currentSession.key}`);
+    
+    if (cachedData && cachedFuncoes && cachedEquipes) {
+        try {
+            geoDatabase = JSON.parse(cachedData);
+            allFunctionsList = new Set(JSON.parse(cachedFuncoes));
+            allTeamsList = new Set(JSON.parse(cachedEquipes));
+            
+            populateFilters();
+            initMap();
+            initMobileList(); 
+            applyFilters(); 
+        } catch(e) {
+            console.error("Erro ao ler cache", e);
+        }
+    }
+
+    fetchSpreadsheetData(); 
+}
+
+window.onload = () => { 
+    const savedSession = sessionStorage.getItem('painel_session');
+    if (savedSession) {
+        currentSession = JSON.parse(savedSession);
+        document.getElementById('login-overlay').style.display = 'none';
+        initApp();
+    } else {
+        const keyInput = document.getElementById('key-input');
+        const eyeBtn = document.getElementById('eye-btn');
+        
+        keyInput.focus();
+        keyInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                performLogin();
+            }
+        });
+        
+        keyInput.addEventListener('input', function() {
+            if (this.value.length > 0) {
+                eyeBtn.classList.remove('hidden');
+            } else {
+                eyeBtn.classList.add('hidden');
+                this.type = 'password';
+                document.getElementById('eye-icon-show').classList.remove('hidden');
+                document.getElementById('eye-icon-hide').classList.add('hidden');
+            }
+        });
+    }
+};
