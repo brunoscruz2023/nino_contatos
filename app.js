@@ -215,7 +215,7 @@ function initMobileList() {
                 </div>
                 <div class="flex-1 min-w-0">
                     <p class="text-sm font-bold text-slate-800 truncate">${data.bairro}</p>
-                    <div class="flex items-center gap-2 text-[10px] font-bold mt-0.5 card-metrics">
+                    <div class="flex items-center gap-1 text-[10px] font-bold mt-0.5 card-metrics">
                         <!-- Métricas populadas no applyFilters -->
                     </div>
                 </div>
@@ -395,8 +395,8 @@ function applyFilters() {
                 data.domMobileCard.classList.remove('is-hidden-mobile');
                 data.domMobileCard.querySelector('.count-number').innerText = quantidade;
                 
-                // Atualiza as métricas no card mobile com ícone e formatação
-                let metricsHTML = `${trendIcon} ${mobileWeekIndicator} <span class="text-slate-300 mx-1">/</span> ${mobileMonthIndicator}`;
+                // Atualiza as métricas no card mobile. mx-0 aplicado.
+                let metricsHTML = `${trendIcon}${mobileWeekIndicator}<span class="text-slate-300 mx-0">/</span>${mobileMonthIndicator}`;
                 data.domMobileCard.querySelector('.card-metrics').innerHTML = metricsHTML;
                 
                 let nomesListaHTML = nomesFiltradosObj.map(n => `<p class="py-1 border-b border-slate-100 last:border-0">• ${n.nome}</p>`).join('');
