@@ -8,6 +8,60 @@ let allTeamsList = new Set();
 let fetchTimeout;
 let currentSession = null;
 
+// ==========================================
+// FUNÇÕES DE DATA E CÁLCULO (À PROVA DE FALHAS)
+// ==========================================
+function parseCustomDate(dateInput) {
+    if (!dateInput) return null;
+    
+    // Se já for um objeto Date do JavaScript
+    if (dateInput instanceof Date) {
+        const d = new Date(dateInput);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }
+    
+    const dateStr = dateInput.toString().trim();
+    
+    // Padrão Google Sheets API: Date(YYYY, M, D)
+    if (dateStr.startsWith('Date(')) {
+        const match = dateStr.match(/Date\((\d+),(\d+),(\d+)/);
+        if (match) {
+            // O gviz usa mês 0-11 (janeiro é 0), igual ao JS. Então não precisa subtrair 1.
+            const d = new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]));
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
+    }
+    
+    // Padrão DD/MM/AAAA
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+        const d = new Date(parts[2], parts[1] - 1, parts[0]);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }
+    
+    // Fallback para string nativa (ex: ISO string vinda do cache)
+    const parsed = new Date(dateStr);
+    if (!isNaN(parsed.getTime())) {
+        parsed.setHours(0, 0, 0, 0);
+        return parsed;
+    }
+    
+    return null;
+}
+
+const today = new Date();
+const currentWeekStart = new Date(today);
+const dayOfWeek = today.getDay(); // 0 = Domingo
+currentWeekStart.setDate(today.getDate() - dayOfWeek);
+currentWeekStart.setHours(0, 0, 0, 0);
+
+const lastWeekStart = new Date(currentWeekStart);
+lastWeekStart.setDate(currentWeekStart.getDate() - 7);
+lastWeekStart.setHours(0, 0, 0, 0);
+
 const geoDicionario = {
     // --- BAIXADA ---
     "Caxias": {x: 58, y: 11, regiao: "Baixada"},
@@ -257,6 +311,7 @@ function processarRetornoPlanilha(json) {
         let valorFuncao = row.c[4] && row.c[4].v ? row.c[4].v.toString().trim() : "Não definida";
         let nomeContato = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "Não informado";
         let valorEquipe = row.c[5] && row.c[5].v ? row.c[5].v.toString().trim() : "Não definida";
+        let valorData = row.c[6] && row.c[6].v ? row.c[6].v : ""; // Pode vir como Date Object ou String
         
         allFunctionsList.add(valorFuncao);
         allTeamsList.add(valorEquipe);
@@ -275,7 +330,7 @@ function processarRetornoPlanilha(json) {
         
         bairroAgrupamento[nomeRealDoBairro].total++;
         bairroAgrupamento[nomeRealDoBairro].funcoes[valorFuncao] = (bairroAgrupamento[nomeRealDoBairro].funcoes[valorFuncao] || 0) + 1;
-        bairroAgrupamento[nomeRealDoBairro].nomes.push({ nome: nomeContato, funcao: valorFuncao, equipe: valorEquipe });
+        bairroAgrupamento[nomeRealDoBairro].nomes.push({ nome: nomeContato, funcao: valorFuncao, equipe: valorEquipe, data: valorData });
     });
 
     populateFilters();

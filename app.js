@@ -215,7 +215,9 @@ function initMobileList() {
                 </div>
                 <div class="flex-1 min-w-0">
                     <p class="text-sm font-bold text-slate-800 truncate">${data.bairro}</p>
-                    <p class="text-xs text-slate-400">${data.regiao}</p>
+                    <div class="flex items-center gap-2 text-[10px] font-bold mt-0.5 card-metrics">
+                        <!-- Métricas populadas no applyFilters -->
+                    </div>
                 </div>
                 <div class="text-right flex-shrink-0">
                     <p class="text-2xl font-extrabold ${uiColor.text} leading-none count-number">0</p>
@@ -286,6 +288,23 @@ function toggleModalNomes() {
     btn.classList.toggle('text-slate-400');
 }
 
+// Função auxiliar para formatar os indicadores do mobile
+function getMobileIndicator(delta, count) {
+    let arrow = '';
+    let colorClass = 'text-blue-500'; // Azul para manteve igual
+    
+    if (delta > 0) {
+        arrow = '↑';
+        colorClass = 'text-emerald-500'; // Verde
+    } else if (delta < 0) {
+        arrow = '↓';
+        colorClass = 'text-rose-500'; // Vermelho
+    }
+    
+    const formattedCount = String(count).padStart(2, '0');
+    return `<span class="${colorClass}">${arrow ? arrow + ' ' : ''}${formattedCount}</span>`;
+}
+
 function applyFilters() {
     const centerTotalCard = document.getElementById('central-total-card');
     let totalVisivelGeral = 0;
@@ -299,20 +318,71 @@ function applyFilters() {
         centerTotalCard.classList.add('opacity-0', 'scale-90', 'pointer-events-none');
     }
 
+    // Datas para o cálculo mensal
+    const todayDate = new Date();
+    const currentMonthStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+    currentMonthStart.setHours(0,0,0,0);
+    const lastMonthStart = new Date(todayDate.getFullYear(), todayDate.getMonth() - 1, 1);
+    lastMonthStart.setHours(0,0,0,0);
+
     geoDatabase.forEach(data => {
-        let nomesFiltrados = data.nomes.filter(n => {
+        // Filtra mantendo o objeto completo para acessar a data
+        let nomesFiltradosObj = data.nomes.filter(n => {
             let funcaoValida = (currentFunctionFilter === 'all' || n.funcao === currentFunctionFilter);
             let equipeValida = (currentTeamFilter === 'all' || n.equipe === currentTeamFilter);
             return funcaoValida && equipeValida;
-        }).map(n => n.nome);
+        });
 
-        let quantidade = nomesFiltrados.length;
+        let quantidade = nomesFiltradosObj.length;
         let isRegiaoValida = (currentRegionFilter === 'all' || data.regiao === currentRegionFilter);
 
         if (quantidade > 0 && isRegiaoValida) {
             totalVisivelGeral += quantidade;
             const uiColor = colorsMap[data.regiao];
 
+            // Cálculo de Métricas
+            let semanaAtual = 0;
+            let semanaPassada = 0;
+            let mesAtual = 0;
+            let mesPassado = 0;
+
+            nomesFiltradosObj.forEach(n => {
+                const leadDate = parseCustomDate(n.data);
+                if (leadDate) {
+                    // Semana
+                    if (leadDate >= currentWeekStart) {
+                        semanaAtual++;
+                    } else if (leadDate >= lastWeekStart && leadDate < currentWeekStart) {
+                        semanaPassada++;
+                    }
+                    
+                    // Mês
+                    if (leadDate >= currentMonthStart) {
+                        mesAtual++;
+                    } else if (leadDate >= lastMonthStart && leadDate < currentMonthStart) {
+                        mesPassado++;
+                    }
+                }
+            });
+
+            let deltaSemana = semanaAtual - semanaPassada;
+            let deltaMes = mesAtual - mesPassado;
+
+            // Formata indicadores para Mobile
+            let mobileWeekIndicator = getMobileIndicator(deltaSemana, semanaAtual);
+            let mobileMonthIndicator = getMobileIndicator(deltaMes, mesAtual);
+
+            // Ícone de Gráfico Minimalista (Linha subindo)
+            const trendIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 inline-block mr-1 -mt-0.5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>`;
+
+            // Formata indicadores para Desktop (mantendo texto)
+            let semanaArrow = deltaSemana > 0 ? '↑' : (deltaSemana < 0 ? '↓' : '–');
+            let semanaColor = deltaSemana > 0 ? 'text-emerald-500' : (deltaSemana < 0 ? 'text-rose-500' : 'text-slate-500');
+            
+            let mesArrow = deltaMes > 0 ? '↑' : (deltaMes < 0 ? '↓' : '–');
+            let mesColor = deltaMes > 0 ? 'text-emerald-500' : (deltaMes < 0 ? 'text-rose-500' : 'text-slate-500');
+
+            // Atualiza Card Mobile
             data.domLabel.innerHTML = `
                 <span class="text-2xl font-extrabold leading-none tracking-tight">${quantidade}</span>
                 <span class="text-[9px] font-bold uppercase tracking-wider opacity-80 block mt-0.5">${data.bairro}</span>
@@ -325,7 +395,11 @@ function applyFilters() {
                 data.domMobileCard.classList.remove('is-hidden-mobile');
                 data.domMobileCard.querySelector('.count-number').innerText = quantidade;
                 
-                let nomesListaHTML = nomesFiltrados.map(n => `<p class="py-1 border-b border-slate-100 last:border-0">• ${n}</p>`).join('');
+                // Atualiza as métricas no card mobile com ícone e formatação
+                let metricsHTML = `${trendIcon} ${mobileWeekIndicator} <span class="text-slate-300 mx-1">/</span> ${mobileMonthIndicator}`;
+                data.domMobileCard.querySelector('.card-metrics').innerHTML = metricsHTML;
+                
+                let nomesListaHTML = nomesFiltradosObj.map(n => `<p class="py-1 border-b border-slate-100 last:border-0">• ${n.nome}</p>`).join('');
                 let contentDiv = data.domMobileCard.querySelector('.accordion-content');
                 contentDiv.innerHTML = `<div class="pt-3 mt-3 border-t border-slate-100"><div class="flex flex-col">${nomesListaHTML}</div></div>`;
                 
@@ -333,14 +407,19 @@ function applyFilters() {
                 data.domMobileCard.querySelector('.chevron-icon').classList.remove('rotate-180');
             }
 
+            // Atualiza Modal Desktop com as Métricas
             modalHTML += `
                 <div class="bg-white/70 p-4 rounded-xl border border-slate-200/80">
                     <h3 class="font-bold text-slate-800 mb-3 flex items-center justify-between">
                         <span>${data.bairro}</span>
                         <span class="text-xs font-medium px-2 py-0.5 rounded-full ${uiColor.dot} bg-opacity-10 ${uiColor.text}">${quantidade}</span>
                     </h3>
+                    <div class="flex gap-4 text-xs font-bold mb-3">
+                        <span class="${semanaColor}">${semanaArrow} Semana: ${semanaAtual}</span>
+                        <span class="${mesColor}">${mesArrow} Mês: ${mesAtual}</span>
+                    </div>
                     <div class="flex flex-col text-sm text-slate-600 max-h-40 overflow-y-auto pr-1">
-                        ${nomesFiltrados.map(n => `<span class="py-1">• ${n}</span>`).join('')}
+                        ${nomesFiltradosObj.map(n => `<span class="py-1">• ${n.nome}</span>`).join('')}
                     </div>
                 </div>
             `;
