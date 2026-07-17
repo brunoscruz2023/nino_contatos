@@ -310,26 +310,22 @@ function openContactModal(dIdx, nIdx) {
     
     let detailsHTML = '';
     
-    // Referência (CARD e TOTAL)
     if ((currentSession.nivel === 'CARD' || currentSession.nivel === 'TOTAL') && contato.ref) {
         detailsHTML += `<div class="flex justify-between border-b border-slate-200 pb-2"><span class="font-semibold text-slate-500">Referência:</span><span class="text-slate-800 text-right">${contato.ref}</span></div>`;
     }
     
-    // Data (Todos que abrem modal)
     if (contato.data) {
         const parsedDate = parseCustomDate(contato.data);
         const displayData = parsedDate ? parsedDate.toLocaleDateString('pt-BR') : contato.data;
         detailsHTML += `<div class="flex justify-between border-b border-slate-200 pb-2"><span class="font-semibold text-slate-500">Data Cadastro:</span><span class="text-slate-800">${displayData}</span></div>`;
     }
     
-    // Função (Apenas TOTAL)
     if (currentSession.nivel === 'TOTAL' && contato.funcao) {
         detailsHTML += `<div class="flex justify-between border-b border-slate-200 pb-2"><span class="font-semibold text-slate-500">Função:</span><span class="text-slate-800">${contato.funcao}</span></div>`;
     }
     
     document.getElementById('contact-modal-details').innerHTML = detailsHTML;
     
-    // Botão WhatsApp (Apenas TOTAL)
     const wppBtn = document.getElementById('contact-modal-wpp-btn');
     if (currentSession.nivel === 'TOTAL' && contato.fone) {
         wppBtn.href = `https://wa.me/${contato.fone}`;
@@ -444,11 +440,10 @@ function applyFilters() {
                 let metricsHTML = `${trendIcon}${mobileWeekIndicator}<span class="text-slate-300 mx-0">/</span>${mobileMonthIndicator}`;
                 data.domMobileCard.querySelector('.card-metrics').innerHTML = metricsHTML;
                 
-                // Lógica de renderização da lista mobile
                 let nomesListaHTML = '';
                 if (currentSession.nivel !== '') {
                     nomesListaHTML = nomesFiltradosObj.map((n) => {
-                        let originalIdx = data.nomes.indexOf(n); // Garante o índice correto no array original
+                        let originalIdx = data.nomes.indexOf(n);
                         if (currentSession.nivel === 'ZAP' && n.fone) {
                             return `<p class="py-1 border-b border-slate-100 last:border-0"><a href="https://wa.me/${n.fone}" target="_blank" class="text-blue-500 font-medium">${n.nome}</a></p>`;
                         } else if (currentSession.nivel === 'TOTAL' || currentSession.nivel === 'CARD') {
@@ -468,11 +463,10 @@ function applyFilters() {
                 data.domMobileCard.querySelector('.chevron-icon').classList.remove('rotate-180');
             }
 
-            // Lógica de renderização da lista Desktop (Grid)
             let nomesModalHTML = '';
             if (currentSession.nivel !== '') {
                 nomesModalHTML = nomesFiltradosObj.map((n) => {
-                    let originalIdx = data.nomes.indexOf(n); // Garante o índice correto no array original
+                    let originalIdx = data.nomes.indexOf(n);
                     if (currentSession.nivel === 'ZAP' && n.fone) {
                         return `<span class="py-1 flex items-center gap-2 border-b border-slate-100 last:border-0"><a href="https://wa.me/${n.fone}" target="_blank" class="text-blue-500 font-medium">${n.nome}</a></span>`;
                     } else if (currentSession.nivel === 'TOTAL' || currentSession.nivel === 'CARD') {
@@ -521,7 +515,7 @@ function applyFilters() {
     }
 }
 
-function initApp() {
+async function initApp() {
     const statusEl = document.getElementById('status-text');
     const mobileStatusEl = document.getElementById('mobile-status-text');
     if(statusEl) {
@@ -547,6 +541,10 @@ function initApp() {
     const cachedFuncoes = localStorage.getItem(`painel_funcoes_${currentSession.key}_${cacheSuffix}`);
     const cachedEquipes = localStorage.getItem(`painel_equipes_${currentSession.key}_${cacheSuffix}`);
     
+    // 1. Carrega bairros do cache instantaneamente
+    loadBairrosFromCache();
+
+    // 2. Desenha a tela inicial com cache (se existir)
     if (cachedData && cachedFuncoes && cachedEquipes) {
         try {
             geoDatabase = JSON.parse(cachedData);
@@ -562,21 +560,24 @@ function initApp() {
         }
     }
 
+    // 3. Busca bairros atualizados na nuvem
+    await fetchBairrosFromNetwork();
+
+    // 4. Busca contatos atualizados na nuvem
     fetchSpreadsheetData(); 
 }
 
-window.onload = () => { 
+window.onload = async () => { 
     const savedSession = sessionStorage.getItem('painel_session');
     if (savedSession) {
         currentSession = JSON.parse(savedSession);
-        // Força logout se a sessão for antiga e não tiver a propriedade 'nivel'
         if (currentSession.nivel === undefined) {
             sessionStorage.removeItem('painel_session');
             location.reload();
             return;
         }
         document.getElementById('login-overlay').style.display = 'none';
-        initApp();
+        await initApp();
     } else {
         const keyInput = document.getElementById('key-input');
         const eyeBtn = document.getElementById('eye-btn');
