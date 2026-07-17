@@ -14,7 +14,6 @@ let currentSession = null;
 function parseCustomDate(dateInput) {
     if (!dateInput) return null;
     
-    // Se já for um objeto Date do JavaScript
     if (dateInput instanceof Date) {
         const d = new Date(dateInput);
         d.setHours(0, 0, 0, 0);
@@ -23,7 +22,6 @@ function parseCustomDate(dateInput) {
     
     const dateStr = dateInput.toString().trim();
     
-    // Padrão Google Sheets API: Date(YYYY, M, D)
     if (dateStr.startsWith('Date(')) {
         const match = dateStr.match(/Date\((\d+),(\d+),(\d+)/);
         if (match) {
@@ -33,7 +31,6 @@ function parseCustomDate(dateInput) {
         }
     }
     
-    // Padrão DD/MM/AAAA
     const parts = dateStr.split('/');
     if (parts.length === 3) {
         const d = new Date(parts[2], parts[1] - 1, parts[0]);
@@ -41,7 +38,6 @@ function parseCustomDate(dateInput) {
         return d;
     }
     
-    // Fallback para string nativa (ex: ISO string vinda do cache)
     const parsed = new Date(dateStr);
     if (!isNaN(parsed.getTime())) {
         parsed.setHours(0, 0, 0, 0);
@@ -53,7 +49,7 @@ function parseCustomDate(dateInput) {
 
 const today = new Date();
 const currentWeekStart = new Date(today);
-const dayOfWeek = today.getDay(); // 0 = Domingo
+const dayOfWeek = today.getDay(); 
 currentWeekStart.setDate(today.getDate() - dayOfWeek);
 currentWeekStart.setHours(0, 0, 0, 0);
 
@@ -251,6 +247,16 @@ function fetchJsonp(url, callbackName) {
     });
 }
 
+// Função auxiliar para formatar e garantir o DDI 55 do WhatsApp
+function formatPhone(rawFone) {
+    if (!rawFone) return "";
+    let cleanFone = rawFone.toString().trim().replace(/\D/g, ''); // Remove tudo que não for número
+    if (cleanFone && !cleanFone.startsWith('55')) {
+        cleanFone = '55' + cleanFone; // Adiciona código do Brasil se não existir
+    }
+    return cleanFone;
+}
+
 async function fetchSpreadsheetData() {
     const statusEl = document.getElementById('status-text');
     const mobileStatusEl = document.getElementById('mobile-status-text');
@@ -264,11 +270,6 @@ async function fetchSpreadsheetData() {
     }
 
     try {
-        // Mapeamento de colunas por nível de segurança
-        // TOTAL: A, B, C, D, E, F, G
-        // CARD:  A, B, D, E, F, G (omite telefone)
-        // ZAP:   A, B, C, E, F, G (omite referência)
-        // NOME:  A, B, E, F, G
         let queryCols = "A, B, E, F, G";
         if (currentSession.nivel === 'TOTAL') queryCols = "A, B, C, D, E, F, G";
         if (currentSession.nivel === 'CARD') queryCols = "A, B, D, E, F, G";
@@ -325,10 +326,9 @@ function processarRetornoPlanilha(json) {
         let equipe = "";
         let data = "";
 
-        // Mapeamento dinâmico de índices baseado no nível
         let idx = 2;
         if (currentSession.nivel === 'TOTAL') {
-            fone = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().replace(/\D/g, '') : ""; idx++; // Sanitiza telefone
+            fone = formatPhone(row.c[idx] ? row.c[idx].v : ""); idx++;
             ref = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : ""; idx++;
             funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
             equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
@@ -339,7 +339,7 @@ function processarRetornoPlanilha(json) {
             equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
             data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
         } else if (currentSession.nivel === 'ZAP') {
-            fone = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().replace(/\D/g, '') : ""; idx++; // Sanitiza telefone
+            fone = formatPhone(row.c[idx] ? row.c[idx].v : ""); idx++;
             funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
             equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
             data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
