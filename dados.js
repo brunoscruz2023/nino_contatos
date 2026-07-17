@@ -1,27 +1,26 @@
 const SHEET_ID = '1VGgM5QNBY0SiN3VuVYdQB78joPz9blvdrdHNQj9v73I'; 
 const SHEET_NAME = 'Página 1';
 const ACESSOS_SHEET_NAME = 'Acessos';
+const BAIRROS_SHEET_NAME = 'Bairros';
 
 let geoDatabase = [];
 let allFunctionsList = new Set();
 let allTeamsList = new Set();
 let fetchTimeout;
 let currentSession = null;
+let geoDicionario = {}; // Agora é populado dinamicamente
 
 // ==========================================
-// FUNÇÕES DE DATA E CÁLCULO (À PROVA DE FALHAS)
+// FUNÇÕES DE DATA E CÁLCULO
 // ==========================================
 function parseCustomDate(dateInput) {
     if (!dateInput) return null;
-    
     if (dateInput instanceof Date) {
         const d = new Date(dateInput);
         d.setHours(0, 0, 0, 0);
         return d;
     }
-    
     const dateStr = dateInput.toString().trim();
-    
     if (dateStr.startsWith('Date(')) {
         const match = dateStr.match(/Date\((\d+),(\d+),(\d+)/);
         if (match) {
@@ -30,199 +29,28 @@ function parseCustomDate(dateInput) {
             return d;
         }
     }
-    
     const parts = dateStr.split('/');
     if (parts.length === 3) {
         const d = new Date(parts[2], parts[1] - 1, parts[0]);
         d.setHours(0, 0, 0, 0);
         return d;
     }
-    
     const parsed = new Date(dateStr);
     if (!isNaN(parsed.getTime())) {
         parsed.setHours(0, 0, 0, 0);
         return parsed;
     }
-    
     return null;
 }
 
 const today = new Date();
 const currentWeekStart = new Date(today);
-const dayOfWeek = today.getDay(); 
-currentWeekStart.setDate(today.getDate() - dayOfWeek);
+currentWeekStart.setDate(today.getDate() - today.getDay());
 currentWeekStart.setHours(0, 0, 0, 0);
 
 const lastWeekStart = new Date(currentWeekStart);
 lastWeekStart.setDate(currentWeekStart.getDate() - 7);
 lastWeekStart.setHours(0, 0, 0, 0);
-
-const geoDicionario = {
-    // --- BAIXADA ---
-    "Caxias": {x: 58, y: 11, regiao: "Baixada"},
-    "Nilópolis": {x: 44, y: 13, regiao: "Baixada"}, "Nilopolis": {x: 44, y: 13, regiao: "Baixada"},
-    "Coronel Almeida": {x: 50, y: 8, regiao: "Baixada"},
-    "Itaguaí": {x: 18, y: 20, regiao: "Baixada"},
-    "Mesquita": {x: 35, y: 10, regiao: "Baixada"},
-    "Queimados": {x: 42, y: 5, regiao: "Baixada"},
-    "Nova Iguaçu": {x: 30, y: 5, regiao: "Baixada"},
-    "Belford Roxo": {x: 50, y: 5, regiao: "Baixada"},
-    "São João de Meriti": {x: 55, y: 7, regiao: "Baixada"},
-    "Japeri": {x: 22, y: 10, regiao: "Baixada"},
-    "Paracambi": {x: 15, y: 12, regiao: "Baixada"},
-    "Serpentina": {x: 65, y: 8, regiao: "Baixada"},
-    "Cachoeira de Macacu": {x: 98, y: 5, textX: 90, textY: 12, regiao: "Baixada"}, 
-
-    // --- ZONA OESTE ---
-    "Magalhães Bastos": {x: 30, y: 40, regiao: "Zona Oeste"}, "Magalhaes Bastos": {x: 30, y: 40, regiao: "Zona Oeste"},
-    "Mallet": {x: 26, y: 48, regiao: "Zona Oeste"}, "Malet": {x: 26, y: 48, regiao: "Zona Oeste"},
-    "Vila Kennedy": {x: 12, y: 45, regiao: "Zona Oeste"},
-    "Campo Grande": {x: 18, y: 55, regiao: "Zona Oeste"},
-    "Santa Cruz": {x: 8, y: 50, regiao: "Zona Oeste"},
-    "Senador Camará": {x: 15, y: 48, regiao: "Zona Oeste"},
-    "Paciência": {x: 12, y: 60, regiao: "Zona Oeste"},
-    "Sepetiba": {x: 5, y: 58, regiao: "Zona Oeste"},
-    "Santíssimo": {x: 10, y: 55, regiao: "Zona Oeste"},
-    "Inhoaíba": {x: 8, y: 45, regiao: "Zona Oeste"},
-    "Cosmos": {x: 15, y: 60, regiao: "Zona Oeste"},
-    "Camorim": {x: 20, y: 70, regiao: "Zona Oeste"},
-    "Padre Miguel": {x: 28, y: 46, textX: 22, textY: 54, regiao: "Zona Oeste"}, 
-
-    // --- ZONA SUDOESTE ---
-    "Realengo": {x: 20, y: 42, regiao: "Zona Sudoeste"},
-    "Gardênia": {x: 42, y: 55, regiao: "Zona Sudoeste"}, "Gardenia": {x: 42, y: 55, regiao: "Zona Sudoeste"},
-    "Sulacap": {x: 32, y: 52, regiao: "Zona Sudoeste"},
-    "Taquara": {x: 38, y: 62, regiao: "Zona Sudoeste"}, 
-    "Bangu": {x: 15, y: 36, regiao: "Zona Sudoeste"}, 
-    "Curicica": {x: 34, y: 68, regiao: "Zona Sudoeste"},
-    "Guaratiba": {x: 10, y: 65, regiao: "Zona Sudoeste"},
-    "Cidade de Deus": {x: 36, y: 60, textX: 30, textY: 70, regiao: "Zona Sudoeste"},
-    "Pedra de Guaratiba": {x: 6, y: 70, textX: 8, textY: 82, regiao: "Zona Sudoeste"},
-    "Barra de Guaratiba": {x: 4, y: 75, regiao: "Zona Sudoeste"},
-    "Recreio dos Bandeirantes": {x: 12, y: 78, regiao: "Zona Sudoeste"},
-    "Vargem Grande": {x: 8, y: 85, regiao: "Zona Sudoeste"},
-    "Vargem Pequena": {x: 10, y: 82, regiao: "Zona Sudoeste"},
-    "Vila Valqueire": {x: 25, y: 55, regiao: "Zona Sudoeste"},
-    "Tanque": {x: 22, y: 60, regiao: "Zona Sudoeste"},
-    "Praça Seca": {x: 28, y: 58, regiao: "Zona Sudoeste"},
-    "Pechincha": {x: 30, y: 65, regiao: "Zona Sudoeste"},
-    "Freguesia": {x: 28, y: 72, regiao: "Zona Sudoeste"},
-
-    // --- ZONA NORTE ---
-    "Penha": {x: 82, y: 38, textX: 92, textY: 44, regiao: "Zona Norte"},
-    "Vila da Penha": {x: 82, y: 38, textX: 92, textY: 44, regiao: "Zona Norte"},
-    "Maré": {x: 76, y: 30, textX: 88, textY: 24, regiao: "Zona Norte"}, 
-    "Cordovil": {x: 72, y: 26, textX: 82, textY: 20, regiao: "Zona Norte"}, 
-    "Éden": {x: 70, y: 24, textX: 60, textY: 18, regiao: "Zona Norte"}, 
-    "Jardim América": {x: 74, y: 24, textX: 64, textY: 16, regiao: "Zona Norte"}, 
-    "Deodoro": {x: 38, y: 36, textX: 25, textY: 30, regiao: "Zona Norte"}, 
-    "Ricardo de Albuquerque": {x: 44, y: 32, textX: 35, textY: 22, regiao: "Zona Norte"}, 
-    "Anchieta": {x: 41, y: 26, textX: 30, textY: 16, regiao: "Zona Norte"}, 
-    "Cachambi": {x: 68, y: 46, textX: 88, textY: 42, regiao: "Zona Norte"}, 
-    "Costa Barros": {x: 49, y: 25, textX: 55, textY: 14, regiao: "Zona Norte"}, 
-    "Bonsucesso": {x: 74, y: 34, textX: 90, textY: 30, regiao: "Zona Norte"}, 
-    "Ilha do Governador": {x: 80, y: 20, textX: 92, textY: 16, regiao: "Zona Norte"}, 
-    "Jacarezinho": {x: 71, y: 40, textX: 85, textY: 36, regiao: "Zona Norte"}, 
-    "Madureira": {x: 53, y: 42, textX: 40, textY: 50, regiao: "Zona Norte"}, 
-    "Piedade": {x: 59, y: 47, textX: 70, textY: 56, regiao: "Zona Norte"}, 
-    "Vigário Geral": {x: 65, y: 22, textX: 75, textY: 12, regiao: "Zona Norte"}, 
-    "Bento Ribeiro": {x: 48, y: 39, textX: 35, textY: 42, regiao: "Zona Norte"}, 
-    "Cavalcante": {x: 56, y: 36, textX: 60, textY: 22, regiao: "Zona Norte"}, 
-    "Engenho Novo": {x: 65, y: 52, textX: 80, textY: 52, regiao: "Zona Norte"}, 
-    "Guadalupe": {x: 50, y: 30, textX: 48, textY: 16, regiao: "Zona Norte"}, 
-    "Kelson": {x: 76, y: 28, textX: 85, textY: 24, regiao: "Zona Norte"}, 
-    "Abolição": {x: 61, y: 42, textX: 50, textY: 60, regiao: "Zona Norte"}, 
-    "Água Santa": {x: 58, y: 53, textX: 60, textY: 66, regiao: "Zona Norte"}, 
-    "Cascadura": {x: 54, y: 47, textX: 30, textY: 60, regiao: "Zona Norte"}, 
-    "Encantado": {x: 63, y: 46, textX: 75, textY: 48, regiao: "Zona Norte"}, 
-    "Engenho da Rainha": {x: 59, y: 33, textX: 65, textY: 16, regiao: "Zona Norte"}, 
-    "Fazenda Botafogo": {x: 53, y: 26, textX: 42, textY: 16, regiao: "Zona Norte"}, 
-    "Honório Gurgel": {x: 48, y: 34, textX: 25, textY: 36, regiao: "Zona Norte"}, 
-    "Inhaúma": {x: 64, y: 38, textX: 72, textY: 30, regiao: "Zona Norte"}, "Inhauma": {x: 64, y: 38, textX: 72, textY: 30, regiao: "Zona Norte"},
-    "Lins de Vasconcelos": {x: 67, y: 58, textX: 80, textY: 62, regiao: "Zona Norte"}, 
-    "Marechal Hermes": {x: 44, y: 45, textX: 20, textY: 50, regiao: "Zona Norte"}, 
-    "Mariópolis": {x: 38, y: 28, textX: 15, textY: 22, regiao: "Zona Norte"}, "Mariopolis": {x: 38, y: 28, textX: 15, textY: 22, regiao: "Zona Norte"},
-    "Méier": {x: 70, y: 52, textX: 88, textY: 56, regiao: "Zona Norte"}, "Meier": {x: 70, y: 52, textX: 88, textY: 56, regiao: "Zona Norte"},
-    "Oswaldo Cruz": {x: 50, y: 45, textX: 25, textY: 56, regiao: "Zona Norte"}, 
-    "Pavuna": {x: 56, y: 21, textX: 50, textY: 8, regiao: "Zona Norte"}, 
-    "Pilares": {x: 62, y: 39, textX: 68, textY: 24, regiao: "Zona Norte"}, 
-    "Quintino": {x: 56, y: 51, textX: 45, textY: 66, regiao: "Zona Norte"},
-    "Quintino Bocaiúva": {x: 56, y: 51, textX: 45, textY: 66, regiao: "Zona Norte"}, 
-    "São Francisco Xavier": {x: 72, y: 48, textX: 65, textY: 40, regiao: "Zona Norte"},
-    "Irajá": {x: 60, y: 30, regiao: "Zona Norte"},
-    "Colégio": {x: 58, y: 28, regiao: "Zona Norte"},
-    "Vaz Lobo": {x: 55, y: 25, regiao: "Zona Norte"},
-    "Turiaçu": {x: 52, y: 22, regiao: "Zona Norte"},
-    "Parada de Lucas": {x: 62, y: 25, regiao: "Zona Norte"},
-    "Acari": {x: 60, y: 20, regiao: "Zona Norte"},
-    "Barros Filho": {x: 57, y: 18, regiao: "Zona Norte"},
-    "Coelho Neto": {x: 59, y: 15, regiao: "Zona Norte"},
-    "Engenho de Dentro": {x: 66, y: 45, regiao: "Zona Norte"},
-    "Sampaio": {x: 68, y: 48, regiao: "Zona Norte"},
-    "Maracanã": {x: 72, y: 45, regiao: "Zona Norte"},
-    "Vila Isabel": {x: 74, y: 48, regiao: "Zona Norte"},
-    "Todos os Santos": {x: 70, y: 50, regiao: "Zona Norte"},
-    "Grajaú": {x: 66, y: 55, regiao: "Zona Norte"},
-    "Andaraí": {x: 75, y: 54, regiao: "Zona Norte"}, "Andarai": {x: 75, y: 54, regiao: "Zona Norte"},
-    "Rocha Miranda": {x: 52, y: 35, regiao: "Zona Norte"},
-    "Souto": {x: 50, y: 38, regiao: "Zona Norte"},
-    "Tijuca": {x: 70, y: 50, textX: 60, textY: 42, regiao: "Zona Norte"},
-    "Vila Cosmos": {x: 45, y: 22, textX: 35, textY: 14, regiao: "Zona Norte"},
-    "Tomas Coelho": {x: 68, y: 20, textX: 58, textY: 10, regiao: "Zona Norte"}, 
-    "Cidade Alta": {x: 78, y: 28, textX: 88, textY: 22, regiao: "Zona Norte"}, 
-    "Barata": {x: 66, y: 50, textX: 85, textY: 48, regiao: "Zona Norte"},
-    "Batan": {x: 32, y: 44, textX: 40, textY: 50, regiao: "Zona Norte"},
-    "Catiri": {x: 52, y: 18, textX: 45, textY: 12, regiao: "Zona Norte"},
-    "Jacaré": {x: 76, y: 50, textX: 80, textY: 58, regiao: "Zona Norte"},
-    "Riachuelo": {x: 78, y: 52, textX: 88, textY: 54, regiao: "Zona Norte"},
-    "Vila Kosmos": {x: 45, y: 22, textX: 35, textY: 14, regiao: "Zona Norte"}, // Alias de Vila Cosmos
-
-    // --- CENTRO ---
-    "Estácio / Centro": {x: 84, y: 48, regiao: "Centro"}, "Estacio / Centro": {x: 84, y: 48, regiao: "Centro"},
-    "Estácio": {x: 80, y: 45, textX: 68, textY: 35, regiao: "Centro"}, "Estacio": {x: 80, y: 45, textX: 68, textY: 35, regiao: "Centro"},
-    "Rua Luís Vargas": {x: 88, y: 53, regiao: "Centro"}, "Rua Luis Vargas": {x: 88, y: 53, regiao: "Centro"},
-    "Santa Tereza": {x: 78, y: 45, textX: 75, textY: 35, regiao: "Centro"}, 
-    "Catete": {x: 80, y: 60, regiao: "Centro"}, 
-    "Lapa": {x: 78, y: 55, regiao: "Centro"}, 
-    "Glória": {x: 82, y: 60, regiao: "Centro"},
-    "Rio Comprido": {x: 76, y: 50, regiao: "Centro"}, 
-    "Cidade Nova": {x: 80, y: 50, regiao: "Centro"},
-    "Praça da Bandeira": {x: 75, y: 45, regiao: "Centro"}, 
-    "Santo Cristo": {x: 85, y: 55, regiao: "Centro"},
-    "Gamboa": {x: 88, y: 58, regiao: "Centro"}, 
-    "Saúde": {x: 82, y: 65, regiao: "Centro"},
-    "Cosme Velho": {x: 72, y: 65, regiao: "Centro"},
-    "Catumbi": {x: 82, y: 52, textX: 90, textY: 56, regiao: "Centro"},
-
-    // --- ZONA SUL ---
-    "Urca": {x: 85, y: 78, textX: 92, textY: 82, regiao: "Zona Sul"},
-    "Leme": {x: 78, y: 82, textX: 85, textY: 86, regiao: "Zona Sul"},
-    "Copacabana": {x: 72, y: 88, textX: 80, textY: 92, regiao: "Zona Sul"},
-    "Ipanema": {x: 65, y: 92, textX: 72, textY: 96, regiao: "Zona Sul"},
-    "Leblon": {x: 58, y: 95, textX: 50, textY: 92, regiao: "Zona Sul"},
-    "Rocinha": {x: 55, y: 90, textX: 45, textY: 86, regiao: "Zona Sul"},
-    "Vidigal": {x: 60, y: 96, textX: 65, textY: 98, regiao: "Zona Sul"},
-    "São Conrado": {x: 50, y: 98, textX: 42, textY: 92, regiao: "Zona Sul"}, "Sao Conrado": {x: 50, y: 98, textX: 42, textY: 92, regiao: "Zona Sul"},
-    "Gávea": {x: 62, y: 78, textX: 55, textY: 75, regiao: "Zona Sul"}, "Gavea": {x: 62, y: 78, textX: 55, textY: 75, regiao: "Zona Sul"},
-    "Jardim Botânico": {x: 68, y: 76, textX: 60, textY: 72, regiao: "Zona Sul"}, "Jardim Botanico": {x: 68, y: 76, textX: 60, textY: 72, regiao: "Zona Sul"},
-    "Laranjeiras": {x: 77, y: 68, textX: 65, textY: 64, regiao: "Zona Sul"},
-    "Botafogo": {x: 80, y: 72, textX: 90, textY: 75, regiao: "Zona Sul"},
-    "Flamengo": {x: 75, y: 65, textX: 65, textY: 70, regiao: "Zona Sul"},
-    "Humaitá": {x: 76, y: 72, textX: 68, textY: 78, regiao: "Zona Sul"}, "Humaita": {x: 76, y: 72, textX: 68, textY: 78, regiao: "Zona Sul"},
-
-    // --- REGIÃO LESTE ---
-    "Niterói": {x: 95, y: 38, textX: 92, textY: 48, regiao: "Região Leste"}, "Niteroi": {x: 95, y: 38, textX: 92, textY: 48, regiao: "Região Leste"},
-    "São Gonçalo": {x: 98, y: 30, textX: 95, textY: 22, regiao: "Região Leste"}, "Sao Goncalo": {x: 98, y: 30, textX: 95, textY: 22, regiao: "Região Leste"},
-    "Itaboraí": {x: 99, y: 15, textX: 92, textY: 8, regiao: "Região Leste"}, "Itaborai": {x: 99, y: 15, textX: 92, textY: 8, regiao: "Região Leste"},
-    "Tanguá": {x: 92, y: 5, textX: 85, textY: 12, regiao: "Região Leste"}, "Tangua": {x: 92, y: 5, textX: 85, textY: 12, regiao: "Região Leste"},
-    "Guapimirim": {x: 80, y: 8, textX: 75, textY: 2, regiao: "Região Leste"},
-
-    // --- INTERIOR ---
-    "Angra dos Reis": {x: 2, y: 98, textX: 10, textY: 96, regiao: "Interior"},
-    "Volta Redonda": {x: 5, y: 95, textX: 12, textY: 92, regiao: "Interior"},
-    "Barra do Piraí": {x: 2, y: 88, textX: 10, textY: 86, regiao: "Interior"}, "Barra do Pirai": {x: 2, y: 88, textX: 10, textY: 86, regiao: "Interior"},
-    "Miguel Pereira": {x: 2, y: 80, textX: 10, textY: 78, regiao: "Interior"}
-};
 
 const colorsMap = {
     "Zona Norte": { text: "text-sky-600", dot: "bg-sky-500", border: "border-sky-400" },
@@ -254,7 +82,6 @@ function fetchJsonp(url, callbackName) {
     });
 }
 
-// Função auxiliar para formatar e garantir o DDI 55 do WhatsApp
 function formatPhone(rawFone) {
     if (!rawFone) return "";
     let cleanFone = rawFone.toString().trim().replace(/\D/g, '');
@@ -262,6 +89,51 @@ function formatPhone(rawFone) {
         cleanFone = '55' + cleanFone;
     }
     return cleanFone;
+}
+
+// ==========================================
+// CARREGAMENTO DINÂMICO DE BAIRROS
+// ==========================================
+function loadBairrosFromCache() {
+    const cachedBairros = localStorage.getItem('painel_bairros_cache');
+    if (cachedBairros) {
+        try {
+            geoDicionario = JSON.parse(cachedBairros);
+        } catch(e) { console.error("Erro cache bairros", e); }
+    }
+}
+
+async function fetchBairrosFromNetwork() {
+    try {
+        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:cb_bairros&sheet=${encodeURIComponent(BAIRROS_SHEET_NAME)}`;
+        const data = await fetchJsonp(url, 'cb_bairros');
+        
+        let freshData = {};
+        if (data && data.table && data.table.rows) {
+            data.table.rows.forEach((row, index) => {
+                if (index === 0 && row.c[0] && row.c[0].v === 'Bairro') return; // Pula cabeçalho
+                
+                let nome = row.c[0] && row.c[0].v ? row.c[0].v.toString().trim() : "";
+                let regiao = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "";
+                let x = row.c[2] && row.c[2].v ? parseFloat(row.c[2].v) : null;
+                let y = row.c[3] && row.c[3].v ? parseFloat(row.c[3].v) : null;
+                let textX = row.c[4] && row.c[4].v ? parseFloat(row.c[4].v) : undefined;
+                let textY = row.c[5] && row.c[5].v ? parseFloat(row.c[5].v) : undefined;
+
+                if (nome && regiao && x !== null && y !== null) {
+                    // A chave é sempre minúscula para facilitar a busca, e guarda o nome oficial
+                    freshData[nome.toLowerCase()] = { nomeOriginal: nome, regiao, x, y, textX, textY };
+                }
+            });
+        }
+        
+        if (Object.keys(freshData).length > 0) {
+            geoDicionario = freshData;
+            localStorage.setItem('painel_bairros_cache', JSON.stringify(geoDicionario));
+        }
+    } catch (e) {
+        console.error("Erro ao buscar bairros", e);
+    }
 }
 
 async function fetchSpreadsheetData() {
@@ -310,11 +182,6 @@ function processarRetornoPlanilha(json) {
     const bairroAgrupamento = {}; 
     allFunctionsList = new Set(); 
     allTeamsList = new Set();
-    
-    const mapaBusca = Object.keys(geoDicionario).reduce((acc, bairro) => {
-        acc[bairro.toLowerCase()] = bairro;
-        return acc;
-    }, {});
 
     json.table.rows.forEach((row, index) => {
         if (!row.c || !row.c[0] || !row.c[0].v) {
@@ -360,12 +227,13 @@ function processarRetornoPlanilha(json) {
         allTeamsList.add(equipe);
 
         let textoFormatado = valorBairro.trim().toLowerCase();
-        if (!mapaBusca[textoFormatado]) {
-            console.warn(`Linha ${index + 2} ignorada: Bairro "${valorBairro}" não encontrado no geoDicionario.`);
+        if (!geoDicionario[textoFormatado]) {
+            console.warn(`Linha ${index + 2} ignorada: Bairro "${valorBairro}" não encontrado na aba Bairros.`);
             return;
         }
 
-        let nomeRealDoBairro = mapaBusca[textoFormatado];
+        let geoInfo = geoDicionario[textoFormatado];
+        let nomeRealDoBairro = geoInfo.nomeOriginal;
         
         if (!bairroAgrupamento[nomeRealDoBairro]) {
             bairroAgrupamento[nomeRealDoBairro] = { total: 0, funcoes: {}, nomes: [] };
@@ -380,7 +248,7 @@ function processarRetornoPlanilha(json) {
 
     for (let bairro in bairroAgrupamento) {
         let dadosBairro = bairroAgrupamento[bairro];
-        let geoInfo = geoDicionario[bairro];
+        let geoInfo = geoDicionario[bairro.toLowerCase()];
         
         geoDatabase.push({
             bairro: bairro, 
