@@ -170,6 +170,12 @@ const geoDicionario = {
     "Vila Cosmos": {x: 45, y: 22, textX: 35, textY: 14, regiao: "Zona Norte"},
     "Tomas Coelho": {x: 68, y: 20, textX: 58, textY: 10, regiao: "Zona Norte"}, 
     "Cidade Alta": {x: 78, y: 28, textX: 88, textY: 22, regiao: "Zona Norte"}, 
+    "Barata": {x: 66, y: 50, textX: 85, textY: 48, regiao: "Zona Norte"},
+    "Batan": {x: 32, y: 44, textX: 40, textY: 50, regiao: "Zona Norte"},
+    "Catiri": {x: 52, y: 18, textX: 45, textY: 12, regiao: "Zona Norte"},
+    "Jacaré": {x: 76, y: 50, textX: 80, textY: 58, regiao: "Zona Norte"},
+    "Riachuelo": {x: 78, y: 52, textX: 88, textY: 54, regiao: "Zona Norte"},
+    "Vila Kosmos": {x: 45, y: 22, textX: 35, textY: 14, regiao: "Zona Norte"}, // Alias de Vila Cosmos
 
     // --- CENTRO ---
     "Estácio / Centro": {x: 84, y: 48, regiao: "Centro"}, "Estacio / Centro": {x: 84, y: 48, regiao: "Centro"},
@@ -186,6 +192,7 @@ const geoDicionario = {
     "Gamboa": {x: 88, y: 58, regiao: "Centro"}, 
     "Saúde": {x: 82, y: 65, regiao: "Centro"},
     "Cosme Velho": {x: 72, y: 65, regiao: "Centro"},
+    "Catumbi": {x: 82, y: 52, textX: 90, textY: 56, regiao: "Centro"},
 
     // --- ZONA SUL ---
     "Urca": {x: 85, y: 78, textX: 92, textY: 82, regiao: "Zona Sul"},
@@ -250,9 +257,9 @@ function fetchJsonp(url, callbackName) {
 // Função auxiliar para formatar e garantir o DDI 55 do WhatsApp
 function formatPhone(rawFone) {
     if (!rawFone) return "";
-    let cleanFone = rawFone.toString().trim().replace(/\D/g, ''); // Remove tudo que não for número
+    let cleanFone = rawFone.toString().trim().replace(/\D/g, '');
     if (cleanFone && !cleanFone.startsWith('55')) {
-        cleanFone = '55' + cleanFone; // Adiciona código do Brasil se não existir
+        cleanFone = '55' + cleanFone;
     }
     return cleanFone;
 }
