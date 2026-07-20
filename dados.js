@@ -3,12 +3,22 @@ const SHEET_NAME = 'Página 1';
 const ACESSOS_SHEET_NAME = 'Acessos';
 const BAIRROS_SHEET_NAME = 'Bairros';
 
+// Cache version bump por mudança de schema (adicao da coluna Subzona na aba Bairros).
+// Cache antigo (sem sufixo _v2) fica orfao no localStorage e e sobrescrito na primeira carga.
+const CACHE_VERSION = 'v2';
+
 let geoDatabase = [];
 let allFunctionsList = new Set();
 let allTeamsList = new Set();
 let fetchTimeout;
 let currentSession = null;
 let geoDicionario = {}; // Agora é populado dinamicamente
+
+// ATENCAO NOMENCLATURA (decisao do usuario Task ID 2-subdivisao-zonas):
+//   geoDicionario[bairro].regiao  -> regiao macro  (ex: "Zona Norte", "Centro")
+//   geoDicionario[bairro].subzona -> subdivisao interna (ex: "Subprefeitura 1") ou null
+//   O nome do campo "subzona" foi escolhido pelo usuario para evitar confusao semantica
+//   com o valor "Zona Norte" que aparece em "regiao".
 
 // ==========================================
 // FUNÇÕES DE DATA E CÁLCULO
@@ -95,7 +105,7 @@ function formatPhone(rawFone) {
 // CARREGAMENTO DINÂMICO DE BAIRROS
 // ==========================================
 function loadBairrosFromCache() {
-    const cachedBairros = localStorage.getItem('painel_bairros_cache');
+    const cachedBairros = localStorage.getItem(`painel_bairros_cache_${CACHE_VERSION}`);
     if (cachedBairros) {
         try {
             geoDicionario = JSON.parse(cachedBairros);
@@ -113,23 +123,26 @@ async function fetchBairrosFromNetwork() {
             data.table.rows.forEach((row, index) => {
                 if (index === 0 && row.c[0] && row.c[0].v === 'Bairro') return; // Pula cabeçalho
                 
+                // Colunas da aba Bairros (schema v2):
+                //   A: Bairro | B: Regiao | C: Subzona (NOVA, opcional) | D: X | E: Y | F: TextX | G: TextY
                 let nome = row.c[0] && row.c[0].v ? row.c[0].v.toString().trim() : "";
                 let regiao = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "";
-                let x = row.c[2] && row.c[2].v ? parseFloat(row.c[2].v) : null;
-                let y = row.c[3] && row.c[3].v ? parseFloat(row.c[3].v) : null;
-                let textX = row.c[4] && row.c[4].v ? parseFloat(row.c[4].v) : undefined;
-                let textY = row.c[5] && row.c[5].v ? parseFloat(row.c[5].v) : undefined;
+                let subzona = row.c[2] && row.c[2].v ? row.c[2].v.toString().trim() : null;
+                let x = row.c[3] && row.c[3].v ? parseFloat(row.c[3].v) : null;
+                let y = row.c[4] && row.c[4].v ? parseFloat(row.c[4].v) : null;
+                let textX = row.c[5] && row.c[5].v ? parseFloat(row.c[5].v) : undefined;
+                let textY = row.c[6] && row.c[6].v ? parseFloat(row.c[6].v) : undefined;
 
                 if (nome && regiao && x !== null && y !== null) {
                     // A chave é sempre minúscula para facilitar a busca, e guarda o nome oficial
-                    freshData[nome.toLowerCase()] = { nomeOriginal: nome, regiao, x, y, textX, textY };
+                    freshData[nome.toLowerCase()] = { nomeOriginal: nome, regiao, subzona, x, y, textX, textY };
                 }
             });
         }
         
         if (Object.keys(freshData).length > 0) {
             geoDicionario = freshData;
-            localStorage.setItem('painel_bairros_cache', JSON.stringify(geoDicionario));
+            localStorage.setItem(`painel_bairros_cache_${CACHE_VERSION}`, JSON.stringify(geoDicionario));
         }
     } catch (e) {
         console.error("Erro ao buscar bairros", e);
@@ -253,6 +266,7 @@ function processarRetornoPlanilha(json) {
         geoDatabase.push({
             bairro: bairro, 
             regiao: geoInfo.regiao, 
+            subzona: geoInfo.subzona || null, // NOVO: subdivisao interna da regiao (string ou null)
             x: geoInfo.x, y: geoInfo.y,
             textX: geoInfo.textX, textY: geoInfo.textY, 
             totalGeral: dadosBairro.total,
@@ -263,9 +277,9 @@ function processarRetornoPlanilha(json) {
 
     const cacheSuffix = currentSession.nivel || 'default';
     try {
-        localStorage.setItem(`painel_cache_${currentSession.key}_${cacheSuffix}`, JSON.stringify(geoDatabase));
-        localStorage.setItem(`painel_funcoes_${currentSession.key}_${cacheSuffix}`, JSON.stringify(Array.from(allFunctionsList)));
-        localStorage.setItem(`painel_equipes_${currentSession.key}_${cacheSuffix}`, JSON.stringify(Array.from(allTeamsList)));
+        localStorage.setItem(`painel_cache_${currentSession.key}_${cacheSuffix}_${CACHE_VERSION}`, JSON.stringify(geoDatabase));
+        localStorage.setItem(`painel_funcoes_${currentSession.key}_${cacheSuffix}_${CACHE_VERSION}`, JSON.stringify(Array.from(allFunctionsList)));
+        localStorage.setItem(`painel_equipes_${currentSession.key}_${cacheSuffix}_${CACHE_VERSION}`, JSON.stringify(Array.from(allTeamsList)));
     } catch(e) { console.error("Erro ao salvar cache", e); }
 
     const statusEl = document.getElementById('status-text');
