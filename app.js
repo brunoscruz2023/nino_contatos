@@ -217,9 +217,15 @@ function initMap() {
     container.innerHTML = '';
     svgLayer.innerHTML = '';
 
+    // SEGURANÇA: Cor padrão caso a região não exista no colorsMap (evita o erro Cannot read properties of undefined)
+    const defaultColor = { dot: 'bg-slate-400', text: 'text-slate-400' };
+    const defaultStroke = '#94a3b8'; // Hex equivalente ao slate-400 para SVG
+
     geoDatabase.forEach((data) => {
-        const uiColor = colorsMap[data.regiao];
-        const strokeColor = svgStrokeColors[data.regiao];
+        // Se a região não for encontrada no mapa de cores, usa o defaultColor
+        const uiColor = colorsMap[data.regiao] || defaultColor;
+        const strokeColor = svgStrokeColors[data.regiao] || defaultStroke;
+        
         const finalTextX = data.textX !== undefined ? data.textX : data.x + 4;
         const finalTextY = data.textY !== undefined ? data.textY : data.y - 8;
 
@@ -256,7 +262,7 @@ function initMobileList() {
     listContainer.innerHTML = ''; 
 
     geoDatabase.forEach(data => {
-        const uiColor = colorsMap[data.regiao];
+        const uiColor = colorsMap[data.regiao] || { dot: 'bg-slate-400', text: 'text-slate-400' };
         const card = document.createElement('div');
         card.className = 'mobile-lead-card bg-white p-4 rounded-2xl border border-slate-100 shadow-sm';
         card.setAttribute('data-region', data.regiao);
@@ -317,7 +323,7 @@ function changeRegionFilter(region) {
     const btnMap = { 'all': 'f-all', 'Zona Norte': 'f-zn', 'Zona Oeste': 'f-zo', 'Zona Sudoeste': 'f-zsd', 'Centro': 'f-cc', 'Baixada': 'f-bx', 'Zona Sul': 'f-zs', 'Região Leste': 'f-rl', 'Interior': 'f-int' };
     const activeBtn = document.getElementById(btnMap[region]);
     if(region === 'all') activeBtn.className = "px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-slate-900 text-white transition-all shadow-sm";
-    else activeBtn.className = `px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl ${colorsMap[region].dot} text-white transition-all shadow-sm`;
+    else activeBtn.className = `px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl ${colorsMap[region] ? colorsMap[region].dot : 'bg-slate-400'} text-white transition-all shadow-sm`;
 
     applyFilters();
 }
@@ -550,7 +556,7 @@ function renderMobileList() {
         }
 
         const subzonas = getSubzonasForRegion(currentRegionFilter, bairrosVisiveis);
-        const uiColor = colorsMap[currentRegionFilter];
+        const uiColor = colorsMap[currentRegionFilter] || { dot: 'bg-slate-400', text: 'text-slate-400', border: 'border-slate-400' };
         const trendIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 inline-block mr-1 -mt-0.5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>`;
 
         subzonas.forEach(sz => {
@@ -588,11 +594,6 @@ function renderMobileList() {
 
             const contentDiv = wrapper.querySelector('.subzona-content');
 
-            // Mover bairro cards (ja criados e atualizados na FASE 1) para dentro do wrapper.
-            // appendChild preserva event listeners e estado interno do DOM.
-            // REFORCO VISUAL 1+2: indentacao lateral (border-l-2 colorida) no container + card
-            // do bairro mais "leve" (fundo claro, sem sombra, borda suave, numero menor) para
-            // indicar hierarquia subnivel vs card-pai da subzona.
             sz.bairros.forEach(b => {
                 if (b.domMobileCard) {
                     contentDiv.appendChild(b.domMobileCard);
@@ -616,8 +617,6 @@ function renderMobileList() {
         geoDatabase.forEach(data => {
             if (data.domMobileCard) {
                 listContainer.appendChild(data.domMobileCard);
-                // REVERTER REFORCO VISUAL 1+2: remover estilo "leve" aplicado no modo agrupado,
-                // restaurando visual original do card (bg-white, sombra, borda cheia, numero grande).
                 data.domMobileCard.classList.remove('subzona-child');
                 data.domMobileCard.classList.remove('bg-slate-50/60', 'shadow-none', 'border-slate-200/60');
                 data.domMobileCard.classList.add('bg-white', 'shadow-sm', 'border-slate-100');
@@ -655,7 +654,7 @@ function renderDesktopModal() {
 
     // Helper: build single bairro card HTML (identico ao comportamento original)
     const buildBairroCard = (data) => {
-        const uiColor = colorsMap[data.regiao];
+        const uiColor = colorsMap[data.regiao] || { dot: 'bg-slate-400', text: 'text-slate-400' };
         const semanaArrow = data.deltaSemana > 0 ? '↑' : (data.deltaSemana < 0 ? '↓' : '–');
         const semanaColor = data.deltaSemana > 0 ? 'text-emerald-500' : (data.deltaSemana < 0 ? 'text-rose-500' : 'text-slate-500');
         const mesArrow = data.deltaMes > 0 ? '↑' : (data.deltaMes < 0 ? '↓' : '–');
