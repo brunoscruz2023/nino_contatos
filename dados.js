@@ -1,66 +1,7 @@
-const SHEET_ID = '1VGgM5QNBY0SiN3VuVYdQB78joPz9blvdrdHNQj9v73I'; 
-const SHEET_NAME = 'Página 1';
-const ACESSOS_SHEET_NAME = 'Acessos';
-const BAIRROS_SHEET_NAME = 'Bairros';
-
-// Cache version bump por mudança de schema (adicao da coluna Subzona na aba Bairros).
-// Cache antigo (sem sufixo _v2) fica orfao no localStorage e e sobrescrito na primeira carga.
-const CACHE_VERSION = 'v2';
-
 let geoDatabase = [];
 let allFunctionsList = new Set();
 let allTeamsList = new Set();
 let fetchTimeout;
-let currentSession = null;
-let geoDicionario = {}; // Agora é populado dinamicamente
-
-// ATENCAO NOMENCLATURA (decisao do usuario Task ID 2-subdivisao-zonas):
-//   geoDicionario[bairro].regiao  -> regiao macro  (ex: "Zona Norte", "Centro")
-//   geoDicionario[bairro].subzona -> subdivisao interna (ex: "Subprefeitura 1") ou null
-//   O nome do campo "subzona" foi escolhido pelo usuario para evitar confusao semantica
-//   com o valor "Zona Norte" que aparece em "regiao".
-
-// ==========================================
-// FUNÇÕES DE DATA E CÁLCULO
-// ==========================================
-function parseCustomDate(dateInput) {
-    if (!dateInput) return null;
-    if (dateInput instanceof Date) {
-        const d = new Date(dateInput);
-        d.setHours(0, 0, 0, 0);
-        return d;
-    }
-    const dateStr = dateInput.toString().trim();
-    if (dateStr.startsWith('Date(')) {
-        const match = dateStr.match(/Date\((\d+),(\d+),(\d+)/);
-        if (match) {
-            const d = new Date(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]));
-            d.setHours(0, 0, 0, 0);
-            return d;
-        }
-    }
-    const parts = dateStr.split('/');
-    if (parts.length === 3) {
-        const d = new Date(parts[2], parts[1] - 1, parts[0]);
-        d.setHours(0, 0, 0, 0);
-        return d;
-    }
-    const parsed = new Date(dateStr);
-    if (!isNaN(parsed.getTime())) {
-        parsed.setHours(0, 0, 0, 0);
-        return parsed;
-    }
-    return null;
-}
-
-const today = new Date();
-const currentWeekStart = new Date(today);
-currentWeekStart.setDate(today.getDate() - today.getDay());
-currentWeekStart.setHours(0, 0, 0, 0);
-
-const lastWeekStart = new Date(currentWeekStart);
-lastWeekStart.setDate(currentWeekStart.getDate() - 7);
-lastWeekStart.setHours(0, 0, 0, 0);
 
 const colorsMap = {
     "Zona Norte": { text: "text-sky-600", dot: "bg-sky-500", border: "border-sky-400" },
@@ -77,29 +18,6 @@ const svgStrokeColors = {
     "Zona Norte": "#38bdf8", "Zona Oeste": "#34d399", "Zona Sudoeste": "#8b5cf6", "Centro": "#818cf8", "Baixada": "#fbbf24", "Zona Sul": "#fb7185",
     "Região Leste": "#22d3ee", "Interior": "#64748b"
 };
-
-function fetchJsonp(url, callbackName) {
-    return new Promise((resolve, reject) => {
-        window[callbackName] = function(data) {
-            resolve(data);
-            delete window[callbackName];
-        };
-        const script = document.createElement('script');
-        script.src = url;
-        document.body.appendChild(script);
-        script.onerror = () => reject(new Error('Falha de rede'));
-        setTimeout(() => reject(new Error('Timeout')), 10000);
-    });
-}
-
-function formatPhone(rawFone) {
-    if (!rawFone) return "";
-    let cleanFone = rawFone.toString().trim().replace(/\D/g, '');
-    if (cleanFone && !cleanFone.startsWith('55')) {
-        cleanFone = '55' + cleanFone;
-    }
-    return cleanFone;
-}
 
 // ==========================================
 // CARREGAMENTO DINÂMICO DE BAIRROS
@@ -123,8 +41,6 @@ async function fetchBairrosFromNetwork() {
             data.table.rows.forEach((row, index) => {
                 if (index === 0 && row.c[0] && row.c[0].v === 'Bairro') return; // Pula cabeçalho
                 
-                // Colunas da aba Bairros (schema v2):
-                //   A: Bairro | B: Regiao | C: Subzona (NOVA, opcional) | D: X | E: Y | F: TextX | G: TextY
                 let nome = row.c[0] && row.c[0].v ? row.c[0].v.toString().trim() : "";
                 let regiao = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "";
                 let subzona = row.c[2] && row.c[2].v ? row.c[2].v.toString().trim() : null;
@@ -134,7 +50,6 @@ async function fetchBairrosFromNetwork() {
                 let textY = row.c[6] && row.c[6].v ? parseFloat(row.c[6].v) : undefined;
 
                 if (nome && regiao && x !== null && y !== null) {
-                    // A chave é sempre minúscula para facilitar a busca, e guarda o nome oficial
                     freshData[nome.toLowerCase()] = { nomeOriginal: nome, regiao, subzona, x, y, textX, textY };
                 }
             });
@@ -266,7 +181,7 @@ function processarRetornoPlanilha(json) {
         geoDatabase.push({
             bairro: bairro, 
             regiao: geoInfo.regiao, 
-            subzona: geoInfo.subzona || null, // NOVO: subdivisao interna da regiao (string ou null)
+            subzona: geoInfo.subzona || null,
             x: geoInfo.x, y: geoInfo.y,
             textX: geoInfo.textX, textY: geoInfo.textY, 
             totalGeral: dadosBairro.total,
