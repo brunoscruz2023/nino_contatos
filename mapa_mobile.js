@@ -36,6 +36,15 @@ App.Mapa.Mobile = {
         var listContainer = document.getElementById('mobile-list-content');
         listContainer.innerHTML = ''; 
 
+        // Verifica acesso global logo no início
+        let nivel = currentSession.nivel || '';
+        let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
+        let isTotal = arrNivel.includes('000') || arrNivel.includes('TOTAL');
+        let isCard = arrNivel.includes('003') || arrNivel.includes('CARD');
+        let isZap = arrNivel.includes('002') || arrNivel.includes('ZAP');
+        let isNome = arrNivel.includes('001') || arrNivel.includes('NOME');
+        let temAcesso = isTotal || isCard || isZap || isNome;
+
         geoDatabase.forEach(function(data) {
             var uiColor = colorsMap[data.regiao] || { text: "text-slate-600", dot: "bg-slate-500", border: "border-slate-400" };
             var card = document.createElement('div');
@@ -60,21 +69,23 @@ App.Mapa.Mobile = {
             '</div>' +
             '<div class="accordion-content w-full text-sm text-slate-600"></div>';
             
-            card.addEventListener('click', function() {
-                if (currentSession.nivel === '') return; 
-                var content = this.querySelector('.accordion-content');
-                var chevron = this.querySelector('.chevron-icon');
-                if (content.style.maxHeight && content.style.maxHeight !== '0px') {
-                    content.style.maxHeight = '0px';
-                    chevron.classList.remove('rotate-180');
-                } else {
-                    content.style.maxHeight = content.scrollHeight + 'px';
-                    chevron.classList.add('rotate-180');
-                }
-            });
-
-            if (currentSession.nivel === '') {
+            // AQUI FICA A DECISÃO DE CLIQUE: SÓ ADICIONA SE TIVER ACESSO
+            if (temAcesso) {
+                card.addEventListener('click', function() {
+                    var content = this.querySelector('.accordion-content');
+                    var chevron = this.querySelector('.chevron-icon');
+                    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+                        content.style.maxHeight = '0px';
+                        chevron.classList.remove('rotate-180');
+                    } else {
+                        content.style.maxHeight = content.scrollHeight + 'px';
+                        chevron.classList.add('rotate-180');
+                    }
+                });
+            } else {
+                // Se não tem acesso, esconde a seta e não faz nada ao clicar
                 card.querySelector('.chevron-icon').classList.add('hidden');
+                card.style.cursor = 'default';
             }
 
             listContainer.appendChild(card);

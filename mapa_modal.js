@@ -30,7 +30,13 @@ App.Mapa.Modal = {
         
         let detailsHTML = '';
         
-        if ((currentSession.nivel === 'CARD' || currentSession.nivel === 'TOTAL') && contato.ref) {
+        let nivel = currentSession.nivel || '';
+        let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
+        let isTotal = arrNivel.includes('000') || arrNivel.includes('TOTAL');
+        let isCard = arrNivel.includes('003') || arrNivel.includes('CARD');
+        let isZap = arrNivel.includes('002') || arrNivel.includes('ZAP');
+        
+        if ((isCard || isTotal) && contato.ref) {
             detailsHTML += `<div class="flex justify-between border-b border-slate-200 pb-2"><span class="font-semibold text-slate-500">Referência:</span><span class="text-slate-800 text-right">${contato.ref}</span></div>`;
         }
         
@@ -40,14 +46,14 @@ App.Mapa.Modal = {
             detailsHTML += `<div class="flex justify-between border-b border-slate-200 pb-2"><span class="font-semibold text-slate-500">Data Cadastro:</span><span class="text-slate-800">${displayData}</span></div>`;
         }
         
-        if (currentSession.nivel === 'TOTAL' && contato.funcao) {
+        if (isTotal && contato.funcao) {
             detailsHTML += `<div class="flex justify-between border-b border-slate-200 pb-2"><span class="font-semibold text-slate-500">Função:</span><span class="text-slate-800">${contato.funcao}</span></div>`;
         }
         
         document.getElementById('contact-modal-details').innerHTML = detailsHTML;
         
         const wppBtn = document.getElementById('contact-modal-wpp-btn');
-        if (currentSession.nivel === 'TOTAL' && contato.fone) {
+        if ((isZap || isTotal || isCard) && contato.fone) {
             wppBtn.href = `https://wa.me/${contato.fone}`;
             wppBtn.classList.remove('hidden');
         } else {
@@ -71,6 +77,14 @@ App.Mapa.Modal = {
         const useGrouping = currentRegionFilter !== 'all' && regionHasSubzonas(currentRegionFilter);
         let modalHTML = '';
 
+        let nivel = currentSession.nivel || '';
+        let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
+        let isTotal = arrNivel.includes('000') || arrNivel.includes('TOTAL');
+        let isCard = arrNivel.includes('003') || arrNivel.includes('CARD');
+        let isZap = arrNivel.includes('002') || arrNivel.includes('ZAP');
+        let isNome = arrNivel.includes('001') || arrNivel.includes('NOME');
+        let temAcesso = isTotal || isCard || isZap || isNome;
+
         const buildBairroCard = (data) => {
             const uiColor = colorsMap[data.regiao] || { text: "text-slate-600", dot: "bg-slate-500", border: "border-slate-400" };
             const semanaArrow = data.deltaSemana > 0 ? '↑' : (data.deltaSemana < 0 ? '↓' : '–');
@@ -79,12 +93,12 @@ App.Mapa.Modal = {
             const mesColor = data.deltaMes > 0 ? 'text-emerald-500' : (data.deltaMes < 0 ? 'text-rose-500' : 'text-slate-500');
 
             let nomesModalHTML = '';
-            if (currentSession.nivel !== '') {
+            if (temAcesso) {
                 nomesModalHTML = data.nomesFiltrados.map((n) => {
                     let originalIdx = data.nomes.indexOf(n);
-                    if (currentSession.nivel === 'ZAP' && n.fone) {
+                    if (isZap && n.fone) {
                         return `<span class="py-1 flex items-center gap-2 border-b border-slate-100 last:border-0"><a href="https://wa.me/${n.fone}" target="_blank" class="text-blue-500 font-medium">${n.nome}</a></span>`;
-                    } else if (currentSession.nivel === 'TOTAL' || currentSession.nivel === 'CARD') {
+                    } else if (isTotal || isCard) {
                         return `<span class="py-1 flex items-center gap-2 border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 rounded-lg px-2 -mx-2" onclick="App.Mapa.Modal.openContactModal(${data.dIdx}, ${originalIdx})">${n.nome}</span>`;
                     } else {
                         return `<span class="py-1 flex items-center gap-2 border-b border-slate-100 last:border-0">• ${n.nome}</span>`;

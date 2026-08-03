@@ -7,7 +7,6 @@ let geoDatabase = [];
 let allFunctionsList = new Set();
 let allTeamsList = new Set();
 let fetchTimeout;
-// let geoDicionario = {};  <-- REMOVIDO: Já declarado no core.js
 
 const colorsMap = {
     "Zona Norte": { text: "text-sky-600", dot: "bg-sky-500", border: "border-sky-400" },
@@ -84,12 +83,22 @@ App.Mapa.Dados = {
         }
 
         try {
-            let queryCols = "A, B, E, F, G";
-            if (currentSession.nivel === 'TOTAL') queryCols = "A, B, C, D, E, F, G";
-            if (currentSession.nivel === 'CARD') queryCols = "A, B, D, E, F, G";
-            if (currentSession.nivel === 'ZAP') queryCols = "A, B, C, E, F, G";
+            let nivel = currentSession.nivel || '';
+            let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
+            
+            let isTotal = arrNivel.includes('000') || arrNivel.includes('TOTAL');
+            let isCard = arrNivel.includes('003') || arrNivel.includes('CARD');
+            let isZap = arrNivel.includes('002') || arrNivel.includes('ZAP');
+
+            let queryCols = "A, B, E, F, G"; // Padrão: Apenas Nome
+            if (isTotal || isCard) {
+                queryCols = "A, B, C, D, E, F, G"; // Total e Card veem Fone e Ref
+            } else if (isZap) {
+                queryCols = "A, B, C, E, F, G"; // Zap ve Fone
+            }
             
             let query = `SELECT ${queryCols}`;
+            
             if (currentSession && !currentSession.teams.includes("TODAS")) {
                 let conditions = currentSession.teams.map(team => `F = '${team}'`).join(' OR ');
                 query += ` WHERE ${conditions}`;
@@ -123,6 +132,13 @@ App.Mapa.Dados = {
             return acc;
         }, {});
 
+        let nivel = currentSession.nivel || '';
+        let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
+        
+        let isTotal = arrNivel.includes('000') || arrNivel.includes('TOTAL');
+        let isCard = arrNivel.includes('003') || arrNivel.includes('CARD');
+        let isZap = arrNivel.includes('002') || arrNivel.includes('ZAP');
+
         json.table.rows.forEach((row, index) => {
             if (!row.c || !row.c[0] || !row.c[0].v) {
                 console.warn(`Linha ${index + 2} ignorada: Coluna A (Bairro) está vazia.`);
@@ -141,18 +157,13 @@ App.Mapa.Dados = {
             let data = "";
 
             let idx = 2;
-            if (currentSession.nivel === 'TOTAL') {
+            if (isTotal || isCard) {
                 fone = App.Core.Utils.formatPhone(row.c[idx] ? row.c[idx].v : ""); idx++;
                 ref = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : ""; idx++;
                 funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
                 equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
                 data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
-            } else if (currentSession.nivel === 'CARD') {
-                ref = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : ""; idx++;
-                funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
-                equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
-                data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
-            } else if (currentSession.nivel === 'ZAP') {
+            } else if (isZap) {
                 fone = App.Core.Utils.formatPhone(row.c[idx] ? row.c[idx].v : ""); idx++;
                 funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
                 equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
@@ -203,10 +214,11 @@ App.Mapa.Dados = {
         }
 
         const cacheSuffix = currentSession.nivel || 'default';
+        const cacheKey = currentSession.key || 'logado';
         try {
-            localStorage.setItem(`painel_cache_${currentSession.key}_${cacheSuffix}_${CACHE_VERSION}`, JSON.stringify(geoDatabase));
-            localStorage.setItem(`painel_funcoes_${currentSession.key}_${cacheSuffix}_${CACHE_VERSION}`, JSON.stringify(Array.from(allFunctionsList)));
-            localStorage.setItem(`painel_equipes_${currentSession.key}_${cacheSuffix}_${CACHE_VERSION}`, JSON.stringify(Array.from(allTeamsList)));
+            localStorage.setItem(`painel_cache_${cacheKey}_${cacheSuffix}_${CACHE_VERSION}`, JSON.stringify(geoDatabase));
+            localStorage.setItem(`painel_funcoes_${cacheKey}_${cacheSuffix}_${CACHE_VERSION}`, JSON.stringify(Array.from(allFunctionsList)));
+            localStorage.setItem(`painel_equipes_${cacheKey}_${cacheSuffix}_${CACHE_VERSION}`, JSON.stringify(Array.from(allTeamsList)));
         } catch(e) { console.error("Erro ao salvar cache", e); }
 
         const statusEl = document.getElementById('status-text');
