@@ -31,12 +31,16 @@ function initEventos() {
         </div>
     `;
     
+    // Inicializa o listener da sanfona para a área de conteúdo dos eventos
+    App.UI.AccordionList.initGlobalListener('#calendar-content-area');
     eventosInicializado = true;
     
+    // Renderiza o calendário imediatamente usando os dados em memória (que podem ter vindo do cache ou do preload)
+    renderEventosView();
+    
+    // Se não houver dados em memória, busca na rede
     if (eventosDatabase.length === 0) {
-        fetchEventosData();
-    } else {
-        renderEventosView();
+        fetchEventosData(false);
     }
 }
 
@@ -121,6 +125,8 @@ function updateEventosHeaderTotals(totals) {
 
 function renderEventosView() {
     const contentArea = document.getElementById('calendar-content-area');
+    if (!contentArea) return;
+
     const monthControls = document.getElementById('month-controls');
     const subheader = document.getElementById('eventos-subheader');
     const subheaderContent = document.getElementById('subheader-content');
@@ -294,7 +300,9 @@ function renderWeekButton(weekStartDate) {
 
 function renderEventCard(ev) {
     const isDev = ev.tipo.toLowerCase().startsWith('dev');
-    const typeColor = isDev ? 'bg-sky-100 text-sky-700' : 'bg-emerald-100 text-emerald-700';
+    const uiColor = isDev 
+        ? { text: "text-sky-600", dot: "bg-sky-500", border: "border-sky-400" } 
+        : { text: "text-emerald-600", dot: "bg-emerald-500", border: "border-emerald-400" };
     
     // Agrupa participações para exibição
     let hierarquiaHTML = '';
@@ -371,25 +379,43 @@ function renderEventCard(ev) {
     if (App.Core.Security.canCreateEvent()) {
         actionButtons = `
             <div class="flex gap-2 mt-4 border-t border-slate-100 pt-3">
-                <button onclick="App.Eventos.CRUD.openEditModal('${ev.idEvento}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors">Editar Evento</button>
-                <button onclick="App.Eventos.CRUD.openPresenceModal('${ev.idEvento}', '${ev.participacoes[0].mobilizadorId || ''}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">Cadastrar Presença</button>
+                <button onclick="event.stopPropagation(); App.Eventos.CRUD.openEditModal('${ev.idEvento}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors">Editar Evento</button>
+                <button onclick="event.stopPropagation(); App.Eventos.CRUD.openPresenceModal('${ev.idEvento}', '${ev.participacoes[0].mobilizadorId || ''}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">Cadastrar Presença</button>
             </div>
         `;
     }
     
     return `
-        <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex justify-between items-start mb-3">
-                <h4 class="font-bold text-slate-800">${ev.nome}</h4>
-                <span class="text-xs font-bold px-2 py-1 rounded-full ${typeColor}">${ev.tipo}</span>
+        <div class="accordion-card bg-white p-4 rounded-2xl border border-slate-100 shadow-sm cursor-pointer">
+            <div class="accordion-header flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl ${uiColor.dot} bg-opacity-10 flex items-center justify-center flex-shrink-0">
+                    <div class="w-3 h-3 rounded-full ${uiColor.dot}"></div>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-slate-800 truncate">${ev.nome}</p>
+                    <div class="flex items-center gap-1 text-[10px] font-bold mt-0.5 card-metrics">
+                        <span class="text-slate-500">${ev.bairro}</span>
+                        <span class="text-slate-300 mx-0">/</span>
+                        <span class="text-slate-500">${ev.date.toLocaleDateString('pt-BR')}</span>
+                    </div>
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <p class="text-2xl font-extrabold ${uiColor.text} leading-none count-number">${ev.qtdPresentes}</p>
+                    <p class="text-[10px] text-slate-400 font-medium mt-1">Presentes</p>
+                </div>
+                <svg class="chevron-icon w-5 h-5 text-slate-300 transition-transform duration-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path>
+                </svg>
             </div>
-            <p class="text-xs text-slate-500 mb-3"><strong>Local:</strong> ${ev.bairro} | <strong>Total Presentes:</strong> ${ev.qtdPresentes}</p>
-            
-            ${hierarquiaHTML}
-            
-            ${ev.descricao ? `<p class="text-xs text-slate-500 mt-3 italic border-t border-slate-100 pt-3">"${ev.descricao}"</p>` : ''}
-            
-            ${actionButtons}
+            <div class="accordion-content w-full text-sm text-slate-600" style="max-height: 0px; overflow: hidden; transition: max-height 0.3s ease-out;">
+                <div class="pt-3 mt-3 border-t border-slate-100">
+                    <div class="flex flex-col gap-4">
+                        ${hierarquiaHTML}
+                        ${ev.descricao ? `<p class="text-xs text-slate-500 italic">"${ev.descricao}"</p>` : ''}
+                        ${actionButtons}
+                    </div>
+                </div>
+            </div>
         </div>
     `;
 }

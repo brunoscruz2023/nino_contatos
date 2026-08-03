@@ -2,7 +2,6 @@
 window.App = window.App || {};
 App.Mapa = App.Mapa || {};
 
-// Estado Global (Temporário na window para compatibilidade)
 var currentRegionFilter = 'all';
 var currentFunctionFilter = 'all';
 var currentTeamFilter = 'all';
@@ -12,7 +11,6 @@ var expandedSubzonas = new Set();
 // MÓDULO: UI DO MAPA (App.Mapa.UI)
 // ==========================================
 App.Mapa.UI = {
-    // Utilitários de Subzona (Compartilhados com Mobile e Modal)
     regionHasSubzonas: function(regionName) {
         return geoDatabase.some(function(d) { return d.regiao === regionName && d.subzona; });
     },
@@ -112,21 +110,23 @@ App.Mapa.UI = {
         selectTeamMobile.innerHTML = '<option value="all">Todas as Equipes</option>';
         selectTeamDesktop.innerHTML = '<option value="all">Todas</option>';
         
-        if (currentSession && currentSession.teams.includes("TODAS")) {
+        if (currentSession && (currentSession.teams.includes("TODAS") || currentSession.teams.length > 1)) {
             wrapperMobile.classList.remove('hidden');
             wrapperDesktop.classList.remove('hidden');
             wrapperDesktop.classList.add('flex');
             
             allTeamsList.forEach(function(team) {
-                var opt1 = document.createElement('option');
-                opt1.value = team;
-                opt1.innerText = team;
-                selectTeamMobile.appendChild(opt1);
-                
-                var opt2 = document.createElement('option');
-                opt2.value = team;
-                opt2.innerText = team;
-                selectTeamDesktop.appendChild(opt2);
+                if (currentSession.teams.includes("TODAS") || currentSession.teams.includes(team)) {
+                    var opt1 = document.createElement('option');
+                    opt1.value = team;
+                    opt1.innerText = team;
+                    selectTeamMobile.appendChild(opt1);
+                    
+                    var opt2 = document.createElement('option');
+                    opt2.value = team;
+                    opt2.innerText = team;
+                    selectTeamDesktop.appendChild(opt2);
+                }
             });
         } else {
             wrapperMobile.classList.add('hidden');
@@ -192,6 +192,14 @@ App.Mapa.UI = {
         var lastMonthStart = new Date(todayDate.getFullYear(), todayDate.getMonth() - 1, 1);
         lastMonthStart.setHours(0,0,0,0);
 
+        let nivel = currentSession.nivel || '';
+        let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
+        let isTotal = arrNivel.includes('000') || arrNivel.includes('TOTAL');
+        let isCard = arrNivel.includes('003') || arrNivel.includes('CARD');
+        let isZap = arrNivel.includes('002') || arrNivel.includes('ZAP');
+        let isNome = arrNivel.includes('001') || arrNivel.includes('NOME');
+        let temAcesso = isTotal || isCard || isZap || isNome;
+
         geoDatabase.forEach(function(data, dIdx) {
             var nomesFiltradosObj = data.nomes.filter(function(n) {
                 var funcaoValida = (currentFunctionFilter === 'all' || n.funcao === currentFunctionFilter);
@@ -250,26 +258,31 @@ App.Mapa.UI = {
                 data.domMobileCard.querySelector('.card-metrics').innerHTML = metricsHTML;
 
                 var nomesListaHTML = '';
-                if (currentSession.nivel !== '') {
+                if (temAcesso) {
                     nomesListaHTML = nomesFiltradosObj.map(function(n) {
                         var originalIdx = data.nomes.indexOf(n);
-                        if (currentSession.nivel === 'ZAP' && n.fone) {
+                        if (isZap && n.fone) {
                             return '<p class="py-1 border-b border-slate-100 last:border-0"><a href="https://wa.me/' + n.fone + '" target="_blank" class="text-blue-500 font-medium">' + n.nome + '</a></p>';
-                        } else if (currentSession.nivel === 'TOTAL' || currentSession.nivel === 'CARD') {
+                        } else if (isTotal || isCard) {
                             return '<p class="py-1 border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 rounded-lg px-2 -mx-2" onclick="App.Mapa.Modal.openContactModal(' + dIdx + ', ' + originalIdx + ')">' + n.nome + '</p>';
                         } else {
                             return '<p class="py-1 border-b border-slate-100 last:border-0">• ' + n.nome + '</p>';
                         }
                     }).join('');
                 } else {
-                    nomesListaHTML = '<p class="py-2 text-center text-slate-400 text-xs">Acesso restrito aos nomes.</p>';
+                    nomesListaHTML = '';
                 }
 
+                // Atualiza o conteúdo da sanfona recriando a estrutura interna
                 var contentDiv = data.domMobileCard.querySelector('.accordion-content');
-                contentDiv.innerHTML = '<div class="pt-3 mt-3 border-t border-slate-100"><div class="flex flex-col">' + nomesListaHTML + '</div></div>';
-
-                contentDiv.style.maxHeight = '0px';
-                data.domMobileCard.querySelector('.chevron-icon').classList.remove('rotate-180');
+                if (contentDiv) {
+                    contentDiv.innerHTML = '<div class="pt-3 mt-3 border-t border-slate-100"><div class="flex flex-col">' + nomesListaHTML + '</div></div>';
+                    
+                    // Reseta a sanfona se estiver aberta
+                    contentDiv.style.maxHeight = '0px';
+                    var chevron = data.domMobileCard.querySelector('.chevron-icon');
+                    if(chevron) chevron.classList.remove('rotate-180');
+                }
             }
         });
 
@@ -289,7 +302,7 @@ App.Mapa.UI = {
     },
 
     togglePasswordVisibility: function() {
-        var input = document.getElementById('key-input');
+        var input = document.getElementById('password-input');
         var iconShow = document.getElementById('eye-icon-show');
         var iconHide = document.getElementById('eye-icon-hide');
         if (input.type === 'password') {
@@ -304,7 +317,7 @@ App.Mapa.UI = {
     }
 };
 
-// Aliases globais temporários para compatibilidade com HTML e dados legado
+// Aliases globais
 window.regionHasSubzonas = App.Mapa.UI.regionHasSubzonas;
 window.getSubzonasForRegion = App.Mapa.UI.getSubzonasForRegion;
 window.initMap = App.Mapa.UI.initMap;

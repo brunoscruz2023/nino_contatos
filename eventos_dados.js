@@ -16,25 +16,58 @@ const BASE_CONTATOS_SHEET_NAME = 'Base_Contatos';
 // MÓDULO: DADOS DE EVENTOS (App.Eventos.Dados)
 // ==========================================
 App.Eventos.Dados = {
-    fetchEventosData: async function() {
+    fetchEventosData: async function(isPreload = false) {
         try {
             const urlEventos = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:cb_eventos&sheet=${encodeURIComponent(EVENTOS_SHEET_NAME)}`;
-            const dataEventos = await App.Core.Utils.fetchJsonp(urlEventos, 'cb_eventos');
-            
             const urlBase = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:cb_base&sheet=${encodeURIComponent(BASE_CONTATOS_SHEET_NAME)}`;
-            const dataBase = await App.Core.Utils.fetchJsonp(urlBase, 'cb_base');
+            
+            const [dataEventos, dataBase] = await Promise.all([
+                App.Core.Utils.fetchJsonp(urlEventos, 'cb_eventos'),
+                App.Core.Utils.fetchJsonp(urlBase, 'cb_base')
+            ]);
             
             this.processarDadosEventos(dataEventos, dataBase);
-            renderEventosView();
+            
+            try {
+                localStorage.setItem('eventos_cache_v1', JSON.stringify(eventosDatabase));
+                localStorage.setItem('contatos_base_cache_v1', JSON.stringify(contatosBase));
+            } catch(e) { console.error("Erro ao salvar cache de eventos", e); }
+
+            // Só chama o render se NÃO for preload OU se a tela de eventos já estiver visível
+            const viewEventos = document.getElementById('view-eventos');
+            if (!isPreload || (viewEventos && !viewEventos.classList.contains('hidden'))) {
+                renderEventosView();
+            }
         } catch (e) {
             console.error("Erro ao buscar eventos", e);
-            const container = document.getElementById('view-eventos');
-            if(container) container.innerHTML = '<p class="text-center text-rose-500 p-8">Erro ao carregar eventos. Verifique o console para mais detalhes.</p>';
+            if (!isPreload) {
+                if (eventosDatabase.length > 0) renderEventosView();
+                else {
+                    const container = document.getElementById('view-eventos');
+                    if(container) container.innerHTML = '<p class="text-center text-rose-500 p-8">Erro ao carregar eventos. Verifique o console.</p>';
+                }
+            }
         }
     },
 
+    loadFromCache: function() {
+        const cachedEventos = localStorage.getItem('eventos_cache_v1');
+        const cachedContatos = localStorage.getItem('contatos_base_cache_v1');
+        
+        if (cachedEventos && cachedContatos) {
+            try {
+                eventosDatabase = JSON.parse(cachedEventos);
+                contatosBase = JSON.parse(cachedContatos);
+                return true;
+            } catch(e) {
+                console.error("Erro ao ler cache de eventos", e);
+                return false;
+            }
+        }
+        return false;
+    },
+
     processarDadosEventos: function(jsonEventos, jsonBase) {
-        // 1. Monta a base de contatos na memória
         contatosBase = {};
         if (jsonBase && jsonBase.table && jsonBase.table.rows) {
             jsonBase.table.rows.forEach(row => {
@@ -53,7 +86,6 @@ App.Eventos.Dados = {
             });
         }
 
-        // 2. Processa os Eventos (Agrupando por ID_Evento)
         let eventosMap = {};
         if (jsonEventos && jsonEventos.table && jsonEventos.table.rows) {
             jsonEventos.table.rows.forEach((row, index) => {
@@ -99,10 +131,7 @@ App.Eventos.Dados = {
 
     calcularAgregacaoEventos: function() {
         bolhaDatabase = {
-            regioes: {},
-            coordenadores: {},
-            supervisores: {},
-            mobilizadores: {}
+            regioes: {}, coordenadores: {}, supervisores: {}, mobilizadores: {}
         };
 
         const addTotals = (obj, key, eventos, pessoas) => {
@@ -113,13 +142,10 @@ App.Eventos.Dados = {
 
         eventosDatabase.forEach(ev => {
             let totalPessoas = ev.qtdPresentes;
-            
-            // 1. Regiao (Sempre soma o evento inteiro)
             let bairroInfo = geoDicionario[ev.bairro.toLowerCase()];
             let regiao = bairroInfo ? bairroInfo.regiao : "Não definida";
             addTotals(bolhaDatabase.regioes, regiao, 1, totalPessoas);
 
-            // 2. Constrói uma árvore temporária para não contar o evento 2x para o mesmo coordenador
             let tree = {};
             ev.participacoes.forEach(p => {
                 let cId = p.coordenadorId || "_empty_";
@@ -141,11 +167,8 @@ App.Eventos.Dados = {
                 }
             });
 
-            // 3. Sobe a árvore adicionando os totais (1 evento por nó)
             for (let cId in tree) {
-                if (cId !== "_empty_") {
-                    addTotals(bolhaDatabase.coordenadores, cId, 1, tree[cId].pessoas);
-                }
+                if (cId !== "_empty_") addTotals(bolhaDatabase.coordenadores, cId, 1, tree[cId].pessoas);
                 for (let sId in tree[cId].sups) {
                     addTotals(bolhaDatabase.supervisores, sId, 1, tree[cId].sups[sId].pessoas);
                     for (let mId in tree[cId].sups[sId].mobs) {
@@ -157,9 +180,6 @@ App.Eventos.Dados = {
     }
 };
 
-// ==========================================
-// ALIASES GLOBAIS (Compatibilidade)
-// ==========================================
 window.fetchEventosData = App.Eventos.Dados.fetchEventosData;
 window.processarDadosEventos = App.Eventos.Dados.processarDadosEventos;
 window.calcularAgregacaoEventos = App.Eventos.Dados.calcularAgregacaoEventos;
