@@ -2,7 +2,6 @@
 window.App = window.App || {};
 App.Mapa = App.Mapa || {};
 
-// Estado Global (Temporário na window para compatibilidade)
 var currentRegionFilter = 'all';
 var currentFunctionFilter = 'all';
 var currentTeamFilter = 'all';
@@ -12,7 +11,6 @@ var expandedSubzonas = new Set();
 // MÓDULO: UI DO MAPA (App.Mapa.UI)
 // ==========================================
 App.Mapa.UI = {
-    // Utilitários de Subzona (Compartilhados com Mobile e Modal)
     regionHasSubzonas: function(regionName) {
         return geoDatabase.some(function(d) { return d.regiao === regionName && d.subzona; });
     },
@@ -268,20 +266,23 @@ App.Mapa.UI = {
                         } else if (isTotal || isCard) {
                             return '<p class="py-1 border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 rounded-lg px-2 -mx-2" onclick="App.Mapa.Modal.openContactModal(' + dIdx + ', ' + originalIdx + ')">' + n.nome + '</p>';
                         } else {
-                            // isNome
                             return '<p class="py-1 border-b border-slate-100 last:border-0">• ' + n.nome + '</p>';
                         }
                     }).join('');
                 } else {
-                    // Se não tem acesso, não precisa preencher com mensagem, pois o card nem abre (clique removido no initMobileList)
                     nomesListaHTML = '';
                 }
 
+                // Atualiza o conteúdo da sanfona recriando a estrutura interna
                 var contentDiv = data.domMobileCard.querySelector('.accordion-content');
-                contentDiv.innerHTML = '<div class="pt-3 mt-3 border-t border-slate-100"><div class="flex flex-col">' + nomesListaHTML + '</div></div>';
-
-                contentDiv.style.maxHeight = '0px';
-                data.domMobileCard.querySelector('.chevron-icon').classList.remove('rotate-180');
+                if (contentDiv) {
+                    contentDiv.innerHTML = '<div class="pt-3 mt-3 border-t border-slate-100"><div class="flex flex-col">' + nomesListaHTML + '</div></div>';
+                    
+                    // Reseta a sanfona se estiver aberta
+                    contentDiv.style.maxHeight = '0px';
+                    var chevron = data.domMobileCard.querySelector('.chevron-icon');
+                    if(chevron) chevron.classList.remove('rotate-180');
+                }
             }
         });
 
@@ -316,7 +317,7 @@ App.Mapa.UI = {
     }
 };
 
-// Aliases globais temporários para compatibilidade com o HTML e dados legado
+// Aliases globais
 window.regionHasSubzonas = App.Mapa.UI.regionHasSubzonas;
 window.getSubzonasForRegion = App.Mapa.UI.getSubzonasForRegion;
 window.initMap = App.Mapa.UI.initMap;

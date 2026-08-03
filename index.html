@@ -24,23 +24,20 @@
             body { background-color: #ffffff; padding: 0 !important; overflow: hidden; }
             .canvas-container { aspect-ratio: unset !important; max-width: 100vw !important; width: 100vw !important; height: 100vh; height: 100dvh; border-radius: 0 !important; border: none !important; box-shadow: none !important; display: flex !important; flex-direction: column !important; overflow: hidden !important; }
             
-            /* Cabeçalho fixo */
             .mobile-header-sticky { position: relative !important; top: auto !important; z-index: 50 !important; background-color: #ffffff !important; box-shadow: 0 4px 10px rgba(0,0,0,0.03); flex-shrink: 0; }
             
-            /* O Container de Rolagem (View Mapa/Eventos/Admin) - Correção Flexbox */
             #view-mapa:not(.hidden), #view-eventos:not(.hidden), #view-admin:not(.hidden) {
                 display: block !important;
                 flex: 1 1 0% !important;
-                min-height: 0 !important; /* Essencial para o flex não estourar a tela */
+                min-height: 0 !important; 
                 overflow-y: auto !important;
                 overflow-x: hidden !important;
                 -webkit-overflow-scrolling: touch;
             }
             
-            /* O Mapa: Sticky e com altura baseada na largura (aspect-ratio) */
             .map-wrapper-mobile { 
                 position: sticky !important; 
-                top: 0 !important; 
+                top: calc(30px - 55.2vw) !important; 
                 z-index: 40 !important; 
                 width: 100%; 
                 aspect-ratio: 1414 / 780; 
@@ -57,15 +54,61 @@
             .map-point { width: 10px; height: 10px; border: 1.5px solid #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.2); animation: pulse-point 2s infinite; }
             @keyframes pulse-point { 0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(100, 116, 139, 0); } 100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); } }
             
-            /* Lista abaixo do mapa */
             .mobile-list-container { position: relative !important; z-index: 30 !important; background-color: #f8fafc !important; padding: 1rem !important; min-height: 70vh !important; padding-bottom: 5rem !important; }
             .mobile-list-container::-webkit-scrollbar { width: 0px; }
             .mobile-lead-card { transition: all 0.3s ease; cursor: pointer; }
             .mobile-lead-card:active { background-color: #f1f5f9; transform: scale(0.98); }
             .mobile-lead-card.is-hidden-mobile { display: none; }
             
-            /* Garante que a barra inferior fique fixa */
-            #bottom-nav-bar { flex-shrink: 0 !important; }
+            #bottom-nav-bar { 
+                flex-shrink: 0 !important; 
+                height: 60px; 
+                position: relative; 
+                background: #fff; 
+                border-top: 1px solid #e2e8f0;
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center;
+                z-index: 50;
+                overflow: visible; 
+                padding: 0;
+                box-sizing: border-box;
+            }
+            .nav-item { 
+                display: flex; flex-direction: column; align-items: center; justify-content: center; 
+                height: 100%; padding: 4px 12px; color: #94a3b8; transition: color 0.2s; 
+            }
+            .nav-item.active { color: #4f46e5; font-weight: 800; }
+            .nav-item.active svg { stroke-width: 2.5; }
+            
+            #fab-container {
+                position: relative;
+                width: 80px;
+                height: 100%;
+                display: flex;
+                justify-content: center;
+                align-items: flex-end;
+            }
+            #fab-btn {
+                position: absolute;
+                bottom: 2px; 
+                width: 60px; 
+                height: 60px;
+                border-radius: 50%;
+                background: #4f46e5;
+                color: white;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+                cursor: pointer;
+                transition: transform 0.2s, background 0.2s;
+                border: 3px solid #ffffff;
+                z-index: 60;
+                box-sizing: border-box; 
+            }
+            #fab-btn:active { transform: scale(0.9); }
+            #fab-btn.logout { background: #e11d48; box-shadow: 0 4px 12px rgba(225, 29, 72, 0.4); }
         }
     </style>
 </head>
@@ -80,10 +123,7 @@
             </div>
             
             <div class="flex flex-col gap-3 w-full">
-                <!-- Campo Único (Chave ou Telefone) -->
                 <input type="text" id="key-input" placeholder="Chave ou Telefone..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center font-bold tracking-widest text-slate-800 bg-white/70">
-                
-                <!-- Wrapper do Campo de Senha (Oculto inicialmente) -->
                 <div id="password-wrapper" class="relative w-full hidden">
                     <input type="password" id="password-input" placeholder="Sua Senha (6 dígitos)" class="w-full px-4 py-2.5 pr-12 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center font-bold tracking-widest text-slate-800 bg-white/70">
                     <button type="button" id="eye-btn" onclick="togglePasswordVisibility()" class="hidden absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-slate-600 transition-opacity" title="Mostrar/Esconder senha">
@@ -110,7 +150,7 @@
             </div>
             <div class="flex flex-col gap-3 mt-2 text-sm text-slate-700" id="contact-modal-details"></div>
             <a id="contact-modal-wpp-btn" href="#" target="_blank" class="hidden w-full bg-emerald-500 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-600 transition-all shadow-lg flex items-center justify-center gap-2 mt-2">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01C17.18 3.03 14.69 2 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31c-.82-1.3-1.25-2.81-1.25-4.38 0-4.54 3.7-8.24 8.24-8.24 2.2 0 4.27.86 5.82 2.42 1.56 1.56 2.41 3.63 2.41 5.82 0 4.54-3.7 8.24-8.23 8.24zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.5.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.42-.56-.43-.14 0-.31-.01-.47-.01-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z"/></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01C17.18 3.03 14.69 2 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31c-.82-1.3-1.25-2.81-1.25-4.38 0-4.54 3.7-8.24, 8.24-8.24 2.2 0 4.27.86 5.82 2.42 1.56 1.56 2.41 3.63 2.41 5.82 0 4.54-3.7 8.24-8.23 8.24zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.5.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.42-.56-.43-.14 0-.31-.01-.47-.01-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z"/></svg>
                 Abrir WhatsApp
             </a>
         </div>
@@ -143,7 +183,6 @@
                     </div>
                 </div>
             </div>
-
             <div class="flex flex-col items-end gap-3">
                 <div class="flex flex-wrap gap-1.5 justify-end" id="filter-wrapper">
                     <button onclick="changeRegionFilter('all')" id="f-all" class="px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-semibold rounded-lg md:rounded-xl bg-slate-900 text-white transition-all shadow-sm">Todos</button>
@@ -164,7 +203,6 @@
             <h1 id="app-title-mobile" class="text-3xl font-extrabold text-slate-900 tracking-tight text-center leading-tight">Mapa de Lideranças <span class="font-normal text-slate-400 text-lg">(RJ)</span></h1>
             <span id="mobile-total-count" class="text-2xl font-black text-slate-900 leading-none mt-1 text-center">0</span>
             <span id="mobile-status-text" class="text-[10px] font-medium text-sky-500 animate-pulse mb-3 text-center">Aguardando Login</span>
-
             <div class="grid grid-cols-2 gap-2 w-full">
                 <select id="mobile-region-filter" onchange="changeRegionFilter(this.value)" class="bg-slate-50 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer border border-slate-200 rounded-lg py-2 px-2 text-center">
                     <option value="all">Todas as Regiões</option>
@@ -181,7 +219,6 @@
                     <option value="all">Todas as Funções</option>
                 </select>
             </div>
-
             <div id="mobile-team-wrapper" class="hidden w-full mt-2">
                 <select id="mobile-team-filter" onchange="changeTeamFilter(this.value)" class="w-full bg-slate-50 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer border border-slate-200 rounded-lg py-2 px-2 text-center">
                     <option value="all">Todas as Equipes</option>
@@ -191,7 +228,6 @@
 
         <!-- VIEW MAPA -->
         <div id="view-mapa" class="flex flex-col flex-1">
-            <!-- ÁREA DO MAPA -->
             <div class="map-wrapper-mobile flex-1 relative w-full overflow-hidden bg-slate-50 select-none">
                 <div class="absolute inset-0 z-0 opacity-80 pointer-events-none">
                     <svg viewBox="0 0 1414 780" preserveAspectRatio="none" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -207,18 +243,14 @@
                         <path d="M 1040 440 L 1080 260 L 1200 310 L 1240 460 L 1140 600 L 960 580 L 840 420 Z" fill="#eef2ff" stroke="#c7d2fe" stroke-width="2"/>
                     </svg>
                 </div>
-
                 <div id="central-total-card" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-72 h-72 rounded-full glass-base flex flex-col justify-center items-center text-center border-2 border-indigo-500/20 shadow-xl pointer-events-none scale-100 opacity-100">
                     <span class="text-[11px] font-extrabold uppercase tracking-widest text-indigo-600">Volume Amostral</span>
                     <span id="txt-total-count" class="text-7xl font-black text-slate-900 tracking-tighter my-2 animate-pulse">0</span>
                     <span class="text-xs font-semibold text-slate-500 max-w-[180px]">Leads mapeados em tempo real</span>
                     <span id="status-text" class="text-xs font-semibold text-sky-500 mt-1 animate-pulse">Aguardando Login</span>
                 </div>
-
                 <svg class="svg-lines-layer" id="svg-lines-layer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
                 <div id="map-bounds" class="absolute inset-0 z-20 overflow-hidden"></div>
-
-                <!-- MODAL NOMES -->
                 <div id="modal-nomes-overlay" class="absolute inset-0 z-[60] hidden p-4 md:p-8">
                     <div class="w-full h-full glass-base rounded-2xl flex flex-col p-6 relative border border-white/60 shadow-2xl">
                         <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-200/60">
@@ -231,25 +263,26 @@
                     </div>
                 </div>
             </div>
-
-            <!-- LISTA MOBILE -->
             <div class="mobile-list-container md:hidden">
                 <div id="mobile-list-content" class="flex flex-col gap-2.5"></div>
             </div>
         </div>
 
         <!-- VIEW EVENTOS -->
-        <div id="view-eventos" class="hidden flex-1 bg-slate-50 overflow-auto">
-            <!-- O módulo de eventos injeta conteúdo aqui -->
-        </div>
-
+        <div id="view-eventos" class="hidden flex-1 bg-slate-50 overflow-auto"></div>
         <!-- VIEW ADMIN -->
-        <div id="view-admin" class="hidden flex-1 bg-slate-50 overflow-auto">
-            <!-- O módulo admin_crud.js injeta conteúdo aqui -->
-        </div>
+        <div id="view-admin" class="hidden flex-1 bg-slate-50 overflow-auto"></div>
 
-        <!-- BARRA DE NAVEGAÇÃO INFERIOR -->
-        <nav id="bottom-nav-bar" class="w-full bg-white border-t border-slate-100 flex items-stretch justify-around z-50 flex-shrink-0 h-14"></nav>
+        <!-- NOVA BARRA DE NAVEGAÇÃO INFERIOR COM FAB -->
+        <nav id="bottom-nav-bar" class="w-full bg-white border-t border-slate-100 z-50 flex-shrink-0 hidden">
+            <div id="nav-left" class="flex-1 flex justify-around items-center h-full"></div>
+            <div id="fab-container" class="relative w-20 flex justify-center items-center h-full">
+                <button id="fab-btn" class="flex items-center justify-center shadow-lg border-4 border-white active:scale-90 transition-transform">
+                    <!-- Ícone injetado via JS -->
+                </button>
+            </div>
+            <div id="nav-right" class="flex-1 flex justify-around items-center h-full"></div>
+        </nav>
 
         <footer class="desktop-only w-full bg-white border-t border-slate-100 px-8 py-2.5 flex justify-between items-center z-40 text-[11px] text-slate-400">
             <div class="flex gap-4 flex-wrap">
@@ -292,13 +325,11 @@
                 <label class="block text-xs font-bold text-slate-500 mb-1">Celular do Participante</label>
                 <input type="tel" id="kiosk-phone-input" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-center font-bold text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="(21) 99999-9999">
             </div>
-            
             <div id="kiosk-contact-info" class="hidden bg-emerald-50 border border-emerald-200 p-4 rounded-xl mb-4">
                 <p class="text-xs text-emerald-600 font-bold mb-1">Contato Encontrado:</p>
                 <p id="kiosk-contact-name" class="font-bold text-slate-800 text-lg"></p>
                 <p id="kiosk-contact-bairro" class="text-sm text-slate-500"></p>
             </div>
-            
             <div id="kiosk-new-contact-form" class="hidden space-y-3 mb-4 bg-sky-50 border border-sky-200 p-4 rounded-xl">
                 <p class="text-xs text-sky-600 font-bold">Novo Cadastro</p>
                 <input type="text" id="kiosk-new-name" class="w-full px-4 py-2 border border-slate-300 rounded-xl" placeholder="Nome Completo">
@@ -306,7 +337,6 @@
                 <input type="text" id="kiosk-new-ref" class="w-full px-4 py-2 border border-slate-300 rounded-xl" placeholder="Referência">
                 <input type="text" id="kiosk-new-equipe" class="w-full px-4 py-2 border border-slate-300 rounded-xl" placeholder="Equipe">
             </div>
-
             <button id="kiosk-submit-btn" class="hidden w-full py-3 rounded-xl font-bold text-lg text-white shadow-lg transition-all active:scale-95">Confirmar Presença</button>
         </div>
         <div id="kiosk-status" class="p-4 text-center text-slate-500 text-sm"></div>
@@ -314,6 +344,7 @@
 
     <!-- Scripts carregados na ordem correta de dependência -->
     <script src="core.js"></script>
+    <script src="ui_componentes.js"></script>
     <script src="layout.js"></script>
     <script src="mapa_dados.js"></script>
     <script src="mapa_ui.js"></script>

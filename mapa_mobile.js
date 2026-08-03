@@ -22,21 +22,13 @@ App.Mapa.Mobile = {
         return '<span class="' + colorClass + '">' + (arrow ? arrow + ' ' : '') + formattedCount + '</span>';
     },
 
-    toggleSubzona: function(regionName, subzonaName) {
-        var key = regionName + '::' + subzonaName;
-        if (expandedSubzonas.has(key)) {
-            expandedSubzonas.delete(key);
-        } else {
-            expandedSubzonas.add(key);
-        }
-        App.Mapa.UI.applyFilters();
-    },
-
     initMobileList: function() {
         var listContainer = document.getElementById('mobile-list-content');
         listContainer.innerHTML = ''; 
 
-        // Verifica acesso global logo no início
+        // Inicializa o listener genérico para todas as sanfonas
+        App.UI.AccordionList.initGlobalListener('#mobile-list-content');
+
         let nivel = currentSession.nivel || '';
         let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
         let isTotal = arrNivel.includes('000') || arrNivel.includes('TOTAL');
@@ -47,49 +39,21 @@ App.Mapa.Mobile = {
 
         geoDatabase.forEach(function(data) {
             var uiColor = colorsMap[data.regiao] || { text: "text-slate-600", dot: "bg-slate-500", border: "border-slate-400" };
-            var card = document.createElement('div');
-            card.className = 'mobile-lead-card bg-white p-4 rounded-2xl border border-slate-100 shadow-sm';
-            card.setAttribute('data-region', data.regiao);
             
-            card.innerHTML = '<div class="flex items-center gap-4">' +
-                '<div class="w-10 h-10 rounded-xl ' + uiColor.dot + ' bg-opacity-10 flex items-center justify-center flex-shrink-0">' +
-                    '<div class="w-3 h-3 rounded-full ' + uiColor.dot + '"></div>' +
-                '</div>' +
-                '<div class="flex-1 min-w-0">' +
-                    '<p class="text-sm font-bold text-slate-800 truncate">' + data.bairro + '</p>' +
-                    '<div class="flex items-center gap-1 text-[10px] font-bold mt-0.5 card-metrics"></div>' +
-                '</div>' +
-                '<div class="text-right flex-shrink-0">' +
-                    '<p class="text-2xl font-extrabold ' + uiColor.text + ' leading-none count-number">0</p>' +
-                    '<p class="text-[10px] text-slate-400 font-medium mt-1">leads</p>' +
-                '</div>' +
-                '<svg class="chevron-icon w-5 h-5 text-slate-300 transition-transform duration-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
-                    '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path>' +
-                '</svg>' +
-            '</div>' +
-            '<div class="accordion-content w-full text-sm text-slate-600"></div>';
+            var cardHtml = App.UI.AccordionList.createCard({
+                title: data.bairro,
+                badge: '0',
+                badgeLabel: 'leads',
+                uiColor: uiColor,
+                isCollapsible: temAcesso
+            });
             
-            // AQUI FICA A DECISÃO DE CLIQUE: SÓ ADICIONA SE TIVER ACESSO
-            if (temAcesso) {
-                card.addEventListener('click', function() {
-                    var content = this.querySelector('.accordion-content');
-                    var chevron = this.querySelector('.chevron-icon');
-                    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
-                        content.style.maxHeight = '0px';
-                        chevron.classList.remove('rotate-180');
-                    } else {
-                        content.style.maxHeight = content.scrollHeight + 'px';
-                        chevron.classList.add('rotate-180');
-                    }
-                });
-            } else {
-                // Se não tem acesso, esconde a seta e não faz nada ao clicar
-                card.querySelector('.chevron-icon').classList.add('hidden');
-                card.style.cursor = 'default';
-            }
-
-            listContainer.appendChild(card);
-            data.domMobileCard = card; 
+            var tempDiv = document.createElement('div');
+            tempDiv.innerHTML = cardHtml;
+            var cardEl = tempDiv.firstElementChild;
+            
+            listContainer.appendChild(cardEl);
+            data.domMobileCard = cardEl; 
         });
     },
 

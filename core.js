@@ -172,6 +172,55 @@ App.Core.UI.Modal = {
 };
 
 // ==========================================
+// ROTEADOR DE VIEWS (SHELL)
+// ==========================================
+function toggleView() {
+    var viewMapa = document.getElementById('view-mapa');
+    var viewEventos = document.getElementById('view-eventos');
+    
+    var iconAgendaD = document.querySelector('#btn-toggle-view #icon-agenda');
+    var iconMapaD = document.querySelector('#btn-toggle-view #icon-mapa');
+    var iconAgendaM = document.querySelector('#btn-toggle-view-mobile #icon-agenda');
+    var iconMapaM = document.querySelector('#btn-toggle-view-mobile #icon-mapa');
+    
+    var titleDesktop = document.getElementById('app-title-desktop');
+    var titleMobile = document.getElementById('app-title-mobile');
+    
+    if (!viewMapa.classList.contains('hidden')) {
+        viewMapa.classList.add('hidden');
+        viewEventos.classList.remove('hidden');
+        
+        if(iconAgendaD) iconAgendaD.classList.add('hidden');
+        if(iconMapaD) iconMapaD.classList.remove('hidden');
+        if(iconAgendaM) iconAgendaM.classList.add('hidden');
+        if(iconMapaM) iconMapaM.classList.remove('hidden');
+        
+        if (titleDesktop) titleDesktop.innerText = "Mapa de Eventos";
+        if (titleMobile) titleMobile.innerHTML = "Mapa de Eventos <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
+
+        if (typeof initEventos === 'function') initEventos();
+    } else {
+        viewEventos.classList.add('hidden');
+        viewMapa.classList.remove('hidden');
+        
+        if(iconAgendaD) iconAgendaD.classList.remove('hidden');
+        if(iconMapaD) iconMapaD.classList.add('hidden');
+        if(iconAgendaM) iconAgendaM.classList.remove('hidden');
+        if(iconMapaM) iconMapaM.classList.add('hidden');
+
+        if (titleDesktop) titleDesktop.innerText = "Mapa de Lideranças";
+        if (titleMobile) titleMobile.innerHTML = "Mapa de Lideranças <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
+
+        if (typeof applyFilters === 'function') applyFilters();
+        var mobileStatusEl = document.getElementById('mobile-status-text');
+        if (mobileStatusEl && geoDatabase.length > 0) {
+            mobileStatusEl.innerText = "Tempo Real";
+            mobileStatusEl.className = "text-[10px] font-medium text-emerald-500 mb-3 text-center";
+        }
+    }
+}
+
+// ==========================================
 // CONTROLADOR PRINCIPAL (Movido do app.js)
 // ==========================================
 App.Core.Controller = App.Core.Controller || {};
@@ -293,8 +342,21 @@ App.Core.Controller.initApp = async function() {
         }
     }
 
-    await App.Mapa.Dados.fetchBairrosFromNetwork();
-    App.Mapa.Dados.fetchSpreadsheetData(); 
+    // PRELOAD CONDICIONAL: Busca dados do Mapa e Eventos em paralelo
+    let fetchPromises = [
+        App.Mapa.Dados.fetchBairrosFromNetwork(),
+        App.Mapa.Dados.fetchSpreadsheetData()
+    ];
+
+    // Se tiver acesso a Eventos (Módulo 2 ou 3), carrega os dados em segundo plano
+    if (currentSession.modulos && (currentSession.modulos.includes(2) || currentSession.modulos.includes(3))) {
+        // Tenta carregar do cache primeiro para já deixar pronto
+        App.Eventos.Dados.loadFromCache();
+        // Adiciona a busca na rede ao array de promessas paralelas
+        fetchPromises.push(App.Eventos.Dados.fetchEventosData(true));
+    }
+
+    await Promise.all(fetchPromises);
 };
 
 // Controle de UI do Olho Mágico
@@ -316,9 +378,11 @@ App.Core.UI.togglePasswordVisibility = function() {
 // Aliases globais temporários para o window.onload e HTML
 window.performLogin = App.Core.Controller.performLogin;
 window.logout = App.Core.Controller.logout;
+window.toggleView = toggleView;
 window.togglePasswordVisibility = App.Core.UI.togglePasswordVisibility;
 
 window.onload = async function() { 
+    // ROTEADOR: Verifica se é Modo Quiosque (QR Code)
     var urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('kiosk') === 'true') {
         document.getElementById('login-overlay').style.display = 'none';
@@ -329,6 +393,7 @@ window.onload = async function() {
         return; 
     }
 
+    // Fluxo Normal
     var savedSession = sessionStorage.getItem('painel_session');
     if (savedSession) {
         currentSession = JSON.parse(savedSession);
