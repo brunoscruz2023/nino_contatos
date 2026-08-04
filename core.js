@@ -17,6 +17,7 @@ App.Mapa = App.Mapa || {};
 
 var currentSession = null;
 var geoDicionario = {}; 
+window.dictsGlobal = null; // Armazena dicionários para uso rápido (ex: Cadastro)
 
 // ==========================================
 // MÓDULO: UTILITÁRIOS (App.Core.Utils)
@@ -350,10 +351,26 @@ App.Core.Controller.initApp = async function() {
 
     // Se tiver acesso a Eventos (Módulo 2 ou 3), carrega os dados em segundo plano
     if (currentSession.modulos && (currentSession.modulos.includes(2) || currentSession.modulos.includes(3))) {
-        // Tenta carregar do cache primeiro para já deixar pronto
         App.Eventos.Dados.loadFromCache();
-        // Adiciona a busca na rede ao array de promessas paralelas
         fetchPromises.push(App.Eventos.Dados.fetchEventosData(true));
+    }
+
+    // Busca dicionários globais (inclui funções) em paralelo
+    fetchPromises.push(new Promise((resolve) => {
+        App.Core.API.postEvent({ action: 'getDictionaries' }, function(res) {
+            if(res.status === 'success') {
+                window.dictsGlobal = res;
+                // Salva no localStorage para cache offline
+                localStorage.setItem('dicts_global_cache', JSON.stringify(res));
+            }
+            resolve();
+        });
+    }));
+
+    // Tenta carregar dicionários do cache local imediatamente
+    const cachedDicts = localStorage.getItem('dicts_global_cache');
+    if(cachedDicts) {
+        try { window.dictsGlobal = JSON.parse(cachedDicts); } catch(e){}
     }
 
     await Promise.all(fetchPromises);

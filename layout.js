@@ -9,7 +9,8 @@ const ICONS = {
     admin: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>',
     sair: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>',
     plus: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>',
-    search: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>'
+    search: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
+    cadastro: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path> <circle cx="8.5" cy="7" r="4"></circle> <line x1="20" y1="8" x2="20" y2="14"></line> <line x1="23" y1="11" x2="17" y2="11"></line></svg>'
 };
 
 // ==========================================
@@ -37,6 +38,7 @@ App.Layout.Shell = {
         let firstView = 'mapa';
         if (!modulos.includes(1) && modulos.includes(2)) firstView = 'eventos';
         else if (!modulos.includes(1) && !modulos.includes(2) && (modulos.includes(3) || modulos.includes(4))) firstView = 'admin';
+        else if (modulos.includes(5) && !modulos.includes(1) && !modulos.includes(2)) firstView = 'cadastro';
         
         this.setActive(firstView);
     },
@@ -61,6 +63,9 @@ App.Layout.Shell = {
             }
             
             // Lado Direito (Máx 2)
+            if (modulos.includes(5)) {
+                navRight.innerHTML += `<button data-view="cadastro" class="nav-item flex flex-col items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors">${ICONS.cadastro}<span class="text-[10px] mt-0.5">Cadastro</span></button>`;
+            }
             if (isAdmin) {
                 navRight.innerHTML += `<button data-view="admin" class="nav-item flex flex-col items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors">${ICONS.admin}<span class="text-[10px] mt-0.5">Admin</span></button>`;
             }
@@ -94,6 +99,7 @@ App.Layout.Shell = {
         document.getElementById('view-mapa').classList.add('hidden');
         document.getElementById('view-eventos').classList.add('hidden');
         document.getElementById('view-admin').classList.add('hidden');
+        document.getElementById('view-cadastro').classList.add('hidden');
         
         // Controle de Filtros do Mapa (some em outras telas)
         let mobileMapFilters = document.querySelector('.mobile-header-sticky > .grid');
@@ -129,6 +135,12 @@ App.Layout.Shell = {
             if (typeof App.Admin !== 'undefined' && App.Admin.CRUD) App.Admin.CRUD.init();
             
             this.setFab(ICONS.search, () => { let i = document.getElementById('admin-phone-search'); if(i) i.focus(); });
+        } else if (view === 'cadastro') {
+            document.getElementById('view-cadastro').classList.remove('hidden');
+            document.getElementById('app-title-mobile').innerHTML = "Cadastro <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
+            if (typeof App.Cadastro !== 'undefined' && App.Cadastro.UI) App.Cadastro.UI.init();
+            
+            this.setFab(ICONS.plus, () => { if(typeof App.UI.ContactForm !== 'undefined') App.UI.ContactForm.clear(); });
         }
         
         // Lógica de módulo único: FAB vira Logout
@@ -137,7 +149,6 @@ App.Layout.Shell = {
         }
     },
 
-    // Método público para any module injetar ação no FAB
     setFab: function(iconHtml, onClickCallback, isLogout = false) {
         this.fabBtn.innerHTML = iconHtml;
         this.fabBtn.onclick = onClickCallback;

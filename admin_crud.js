@@ -16,7 +16,7 @@ App.Admin.CRUD = {
             <div class="max-w-4xl mx-auto p-4 md:p-8 w-full">
                 <div class="mb-6">
                     <h2 class="text-2xl font-bold text-slate-800">Gerenciamento de Acessos</h2>
-                    <p class="text-sm text-slate-500">Busque um contato pelo telefone para definir, editar ou resetar a senha e as permissões de acesso.</p>
+                    <p class="text-sm text-slate-500 mt-1">Busque um contato pelo telefone para definir, editar ou resetar a senha e as permissões de acesso.</p>
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
@@ -63,8 +63,10 @@ App.Admin.CRUD = {
         
         if (!formattedPhone) return;
 
+        // Substitui o texto de busca pelo Loader Global
         resultArea.classList.remove('hidden');
-        resultArea.innerHTML = '<p class="text-center text-slate-500 animate-pulse py-8">Buscando contato...</p>';
+        resultArea.innerHTML = ''; 
+        App.UI.Loader.show();
 
         const payload = { action: 'lookupContactByPhone', phone: formattedPhone };
         try {
@@ -75,6 +77,8 @@ App.Admin.CRUD = {
                 });
             });
 
+            App.UI.Loader.hide();
+
             if (res.contact) {
                 this.state.foundContact = res.contact;
                 this.renderAccessForm(res.contact);
@@ -83,6 +87,7 @@ App.Admin.CRUD = {
                 resultArea.innerHTML = `<div class="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-600 font-medium text-sm">Nenhum contato encontrado com este telefone. Cadastre-o primeiro no mapa ou eventos.</div>`;
             }
         } catch (err) {
+            App.UI.Loader.hide();
             resultArea.innerHTML = `<div class="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-600 font-medium text-sm">Erro: ${err}</div>`;
         }
     },
