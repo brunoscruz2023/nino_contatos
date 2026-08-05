@@ -262,7 +262,7 @@ App.Mapa.UI = {
                     nomesListaHTML = nomesFiltradosObj.map(function(n) {
                         var originalIdx = data.nomes.indexOf(n);
                         if (isZap && n.fone) {
-                            return '<p class="py-1 border-b border-slate-100 last:border-0"><a href="https://wa.me/' + n.fone + '" target="_blank" class="text-blue-500 font-medium">' + n.nome + '</a></p>';
+                            return '<p class="py-1 border-b border-slate-100 last:border-0"><a href="https://wa.me/55' + n.fone + '" target="_blank" class="text-blue-500 font-medium">' + n.nome + '</a></p>';
                         } else if (isTotal || isCard) {
                             return '<p class="py-1 border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 rounded-lg px-2 -mx-2" onclick="App.Mapa.Modal.openContactModal(' + dIdx + ', ' + originalIdx + ')">' + n.nome + '</p>';
                         } else {
