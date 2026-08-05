@@ -54,7 +54,7 @@ App.Mapa.Modal = {
         
         const wppBtn = document.getElementById('contact-modal-wpp-btn');
         if ((isZap || isTotal || isCard) && contato.fone) {
-            wppBtn.href = `https://wa.me/${contato.fone}`;
+            wppBtn.href = `https://wa.me/55${contato.fone}`;
             wppBtn.classList.remove('hidden');
         } else {
             wppBtn.classList.add('hidden');
@@ -97,7 +97,7 @@ App.Mapa.Modal = {
                 nomesModalHTML = data.nomesFiltrados.map((n) => {
                     let originalIdx = data.nomes.indexOf(n);
                     if (isZap && n.fone) {
-                        return `<span class="py-1 flex items-center gap-2 border-b border-slate-100 last:border-0"><a href="https://wa.me/${n.fone}" target="_blank" class="text-blue-500 font-medium">${n.nome}</a></span>`;
+                        return `<span class="py-1 flex items-center gap-2 border-b border-slate-100 last:border-0"><a href="https://wa.me/55${n.fone}" target="_blank" class="text-blue-500 font-medium">${n.nome}</a></span>`;
                     } else if (isTotal || isCard) {
                         return `<span class="py-1 flex items-center gap-2 border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 rounded-lg px-2 -mx-2" onclick="App.Mapa.Modal.openContactModal(${data.dIdx}, ${originalIdx})">${n.nome}</span>`;
                     } else {
