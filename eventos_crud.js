@@ -100,15 +100,15 @@ App.Eventos.CRUD = (function() {
                 <div class="border-t border-slate-200 pt-3 mt-3">
                     <h4 class="text-sm font-bold text-slate-700 mb-2">Organização</h4>
                     <div class="grid grid-cols-3 gap-2">
-                        <div>
+                        <div class="min-w-0">
                             <label class="block text-[10px] font-bold text-slate-500">Coord. (Tel)</label>
                             ${renderPhoneInput('coord', data.coord)}
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <label class="block text-[10px] font-bold text-slate-500">Superv. (Tel)</label>
                             ${renderPhoneInput('sup', data.sup)}
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <label class="block text-[10px] font-bold text-slate-500">Mobil. (Tel)</label>
                             ${renderPhoneInput('mob', data.mob)}
                         </div>
@@ -125,9 +125,6 @@ App.Eventos.CRUD = (function() {
         overlay.classList.add('flex');
     }
 
-    // ==========================================
-    // QR CODE LOGIC
-    // ==========================================
     async function generateQR() {
         const eventId = currentEditingEventId;
         if (!eventId) {
@@ -188,10 +185,10 @@ App.Eventos.CRUD = (function() {
         if (preId && contatosBase[preId]) prePhone = contatosBase[preId].telefone;
         
         return `
-            <div class="relative">
+            <div class="relative min-w-0">
                 <input type="text" class="hier-phone w-full px-2 py-1 border border-slate-300 rounded text-xs" placeholder="Telefone..." value="${prePhone}" onblur="App.Eventos.CRUD.searchHierContact(this, '${target}')">
                 <input type="hidden" id="ev-${target}" value="${preId || ''}">
-                <div class="text-[9px] text-slate-500 mt-0.5 hier-name"></div>
+                <div class="text-[9px] text-slate-500 mt-0.5 hier-name truncate"></div>
             </div>
         `;
     }
@@ -219,16 +216,44 @@ App.Eventos.CRUD = (function() {
         if (foundContact) {
             hiddenInput.value = foundContact.id;
             nameDiv.innerText = foundContact.nome + ' (' + foundContact.id + ')';
-            nameDiv.className = 'text-[9px] text-emerald-500 mt-0.5 hier-name';
+            nameDiv.className = 'text-[9px] text-emerald-500 mt-0.5 hier-name truncate';
         } else {
             hiddenInput.value = '';
             nameDiv.innerText = 'Inexistente';
-            nameDiv.className = 'text-[9px] text-rose-500 mt-0.5 hier-name';
+            nameDiv.className = 'text-[9px] text-rose-500 mt-0.5 hier-name truncate';
         }
     }
 
     // ==========================================
-    // PRESENÇA USANDO COMPONENTE REUTILIZÁVEL
+    // NOVA FUNÇÃO: INICIAR ATUAÇÃO (CHECK-IN GPS)
+    // ==========================================
+    async function iniciarAtuacao(eventId) {
+        App.UI.Loader.show();
+        const coords = await App.Core.Utils.getLocation();
+        const userId = App.Core.Security.getUserId();
+        
+        const payload = {
+            action: 'registrarLog',
+            userId: userId,
+            acao: 'INICIO_ATUACAO',
+            refId: eventId,
+            lat: coords.lat,
+            lng: coords.lng,
+            status: 'OK'
+        };
+        
+        App.Core.API.postEvent(payload, function(res) {
+            App.UI.Loader.hide();
+            if (res.status === 'success') {
+                App.UI.SuccessToast.show(1500);
+            } else {
+                alert("Erro ao registrar início de atuação: " + res.message);
+            }
+        });
+    }
+
+    // ==========================================
+    // PRESENÇA USANDO COMPONENTE REUTILIZÁVEL + GPS
     // ==========================================
     function openPresenceModal(eventId, mobId) {
         const ev = eventosDatabase.find(e => e.idEvento === eventId);
@@ -239,23 +264,25 @@ App.Eventos.CRUD = (function() {
         document.getElementById('contact-modal-bairro').innerText = ev.nome + " (" + ev.idEvento + ")";
         document.getElementById('contact-modal-wpp-btn').classList.add('hidden');
         
-        // Container para o componente reutilizável
         document.getElementById('contact-modal-details').innerHTML = '<div id="presence-form-container"></div>';
         
         setupCloseButton();
         overlay.classList.remove('hidden');
         overlay.classList.add('flex');
 
-        // Inicializa o formulário passando a função de callback que adiciona a presença
         App.UI.ContactForm.init('#presence-form-container', {
             onSaveSuccess: async function(contactData) {
-                // O Loader e SuccessToast já são mostrados pelo ContactForm
-                // Aqui fazemos a requisição para adicionar o ID à presença
+                const coords = await App.Core.Utils.getLocation();
+                const userId = App.Core.Security.getUserId();
+
                 const payload = {
                     action: 'updatePresence',
                     eventId: eventId,
                     mobId: mobId,
-                    presence: contactData.id
+                    presence: contactData.id,
+                    userId: userId,
+                    lat: coords.lat,
+                    lng: coords.lng
                 };
 
                 try {
@@ -266,7 +293,6 @@ App.Eventos.CRUD = (function() {
                         });
                     });
 
-                    // Atualiza a base local em memória para refletir na tela ao fechar o modal
                     let evInDb = eventosDatabase.find(e => e.idEvento === eventId);
                     if (evInDb) {
                         let p = evInDb.participacoes.find(pa => pa.mobilizadorId === mobId);
@@ -401,7 +427,8 @@ App.Eventos.CRUD = (function() {
         searchHierContact: searchHierContact,
         generateQR: generateQR,
         deactivateQR: deactivateQR,
-        closeModal: closeModal
+        closeModal: closeModal,
+        iniciarAtuacao: iniciarAtuacao 
     };
 })();
 

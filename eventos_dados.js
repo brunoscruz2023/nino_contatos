@@ -18,12 +18,16 @@ const BASE_CONTATOS_SHEET_NAME = 'Base_Contatos';
 App.Eventos.Dados = {
     fetchEventosData: async function(isPreload = false) {
         try {
-            const urlEventos = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:cb_eventos&sheet=${encodeURIComponent(EVENTOS_SHEET_NAME)}`;
-            const urlBase = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:cb_base&sheet=${encodeURIComponent(BASE_CONTATOS_SHEET_NAME)}`;
+            // CORREÇÃO: Callbacks únicos para evitar colisão em requisições paralelas (Preload vs Init)
+            const cbEv = 'cb_ev_' + Date.now();
+            const cbBase = 'cb_bs_' + Date.now();
+            
+            const urlEventos = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbEv}&sheet=${encodeURIComponent(EVENTOS_SHEET_NAME)}`;
+            const urlBase = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbBase}&sheet=${encodeURIComponent(BASE_CONTATOS_SHEET_NAME)}`;
             
             const [dataEventos, dataBase] = await Promise.all([
-                App.Core.Utils.fetchJsonp(urlEventos, 'cb_eventos'),
-                App.Core.Utils.fetchJsonp(urlBase, 'cb_base')
+                App.Core.Utils.fetchJsonp(urlEventos, cbEv),
+                App.Core.Utils.fetchJsonp(urlBase, cbBase)
             ]);
             
             this.processarDadosEventos(dataEventos, dataBase);
@@ -33,7 +37,6 @@ App.Eventos.Dados = {
                 localStorage.setItem('contatos_base_cache_v1', JSON.stringify(contatosBase));
             } catch(e) { console.error("Erro ao salvar cache de eventos", e); }
 
-            // Só chama o render se NÃO for preload OU se a tela de eventos já estiver visível
             const viewEventos = document.getElementById('view-eventos');
             if (!isPreload || (viewEventos && !viewEventos.classList.contains('hidden'))) {
                 renderEventosView();

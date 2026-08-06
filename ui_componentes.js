@@ -71,7 +71,6 @@ App.UI.Loader = {
         if (!div) {
             div = document.createElement('div');
             div.id = 'global-loader-overlay';
-            // 95% de visibilidade (bg-slate-900/5) e leve blur
             div.className = 'fixed inset-0 z-[9999] bg-slate-900/5 backdrop-blur-md flex items-center justify-center';
             div.innerHTML = `
                 <svg class="animate-spin h-32 w-32" viewBox="0 0 24 24" fill="none">
@@ -97,13 +96,10 @@ App.UI.SuccessToast = {
         if (!div) {
             div = document.createElement('div');
             div.id = 'global-success-overlay';
-            // Mesmo fundo do Loader
             div.className = 'fixed inset-0 z-[9999] bg-slate-900/5 backdrop-blur-md flex items-center justify-center transition-opacity duration-300';
             div.innerHTML = `
                 <svg class="h-32 w-32" viewBox="0 0 24 24" fill="none">
-                    <!-- Mesmo círculo de riscos, mas SEM animate-spin -->
                     <circle cx="12" cy="12" r="9" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="3 3.5"></circle>
-                    <!-- Check vazado (apenas traçado verde) sobreposto -->
                     <path d="M8 12.5l2.5 2.5l5-5.5" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             `;
@@ -136,11 +132,9 @@ App.UI.ContactForm = {
         this.onSaveCallback = config.onSaveSuccess || function(){};
         this.funcoesList = config.funcoes || [];
         
-        let nivel = currentSession.nivel || '';
-        let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
-        this.canEdit = arrNivel.includes('003') || arrNivel.includes('004') || arrNivel.includes('000');
+        // Ajuste para ler a permissão diretamente do novo RBAC
+        this.canEdit = App.Core.Security.canEditContact();
 
-        // Define a equipe do usuário logado para auto-preenchimento
         if (currentSession && currentSession.teams) {
             const validTeams = currentSession.teams.filter(t => t !== 'TODAS');
             if (validTeams.length === 1) {
@@ -148,13 +142,11 @@ App.UI.ContactForm = {
             }
         }
 
-        // Prepara a lista de bairros para o datalist
         let bairrosOptions = '';
         if (typeof geoDicionario !== 'undefined' && geoDicionario) {
             bairrosOptions = Object.values(geoDicionario).map(b => `<option value="${b.nomeOriginal}">`).join('');
         }
 
-        // Prepara as options do select de funções
         const funcoesOptions = this.funcoesList.map(f => `<option value="${f}">${f}</option>`).join('');
 
         this.container.innerHTML = `
@@ -258,7 +250,6 @@ App.UI.ContactForm = {
                 this.container.querySelector('#form-ref').value = res.contact.ref || "";
                 this.container.querySelector('#form-equipe').value = res.contact.equipe || this.userTeam;
                 
-                // Preenche o select de função
                 const funcaoSelect = this.container.querySelector('#form-funcao');
                 let funcaoExists = false;
                 for(let i=0; i<funcaoSelect.options.length; i++) {
@@ -353,10 +344,17 @@ App.UI.ContactForm = {
 
         App.UI.Loader.show();
 
+        // Etapa 5: Captura GPS e ID do usuário
+        const coords = await App.Core.Utils.getLocation();
+        const userId = App.Core.Security.getUserId();
+
         const payload = {
             action: id ? 'updateContact' : 'createContact',
             id: id,
-            nome: nome, bairro: bairro, telefone: phone, ref: ref, equipe: equipe, funcao: funcao
+            nome: nome, bairro: bairro, telefone: phone, ref: ref, equipe: equipe, funcao: funcao,
+            lat: coords.lat,
+            lng: coords.lng,
+            userId: userId
         };
 
         try {
@@ -373,12 +371,10 @@ App.UI.ContactForm = {
                 this.container.querySelector('#form-id').value = res.newId;
             }
 
-            // Efeito de Check Verde Temporizado (vazado, sem texto)
             App.UI.SuccessToast.show(1500);
 
             this.onSaveCallback({ id: this.container.querySelector('#form-id').value, nome, bairro, phone, ref, equipe, funcao });
 
-            // Após 1.5 segundos (tempo do Toast), limpa o formulário e reseta o botão
             setTimeout(() => {
                 this.clear();
             }, 1500);
@@ -398,9 +394,8 @@ App.UI.ContactForm = {
         this.container.querySelector('#form-nome').value = "";
         this.container.querySelector('#form-bairro').value = "";
         this.container.querySelector('#form-ref').value = "";
-        this.container.querySelector('#form-funcao').value = ""; // Limpa o select
+        this.container.querySelector('#form-funcao').value = "";
         
-        // Restaura a equipe do usuário ou limpa
         this.container.querySelector('#form-equipe').value = this.userTeam;
         this.container.querySelector('#form-phone').value = phoneVal;
         

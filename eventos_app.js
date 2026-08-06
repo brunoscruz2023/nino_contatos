@@ -31,14 +31,11 @@ function initEventos() {
         </div>
     `;
     
-    // Inicializa o listener da sanfona para a área de conteúdo dos eventos
     App.UI.AccordionList.initGlobalListener('#calendar-content-area');
     eventosInicializado = true;
     
-    // Renderiza o calendário imediatamente usando os dados em memória (que podem ter vindo do cache ou do preload)
     renderEventosView();
     
-    // Se não houver dados em memória, busca na rede
     if (eventosDatabase.length === 0) {
         fetchEventosData(false);
     }
@@ -78,14 +75,29 @@ function setDayView(dayTimestamp) {
     renderEventosView();
 }
 
+// ETAPA 4: Filtro ABAC aplicado
 function getFilteredEventos() {
-    if (currentRegionFilter === 'all') return eventosDatabase;
+    let filtered = eventosDatabase;
+
+    // Se for Atuante (001) e tiver um ID real, filtra apenas os eventos onde participa
+    if (currentSession && currentSession.funcoes && currentSession.funcoes.agenda === '001' && currentSession.id && currentSession.id !== 'LEGADO' && currentSession.id !== 'ADMIN') {
+        const userId = currentSession.id;
+        filtered = filtered.filter(ev => {
+            if (!ev.participacoes || ev.participacoes.length === 0) return false;
+            return ev.participacoes.some(p => p.coordenadorId === userId || p.supervisorId === userId || p.mobilizadorId === userId);
+        });
+    }
+
+    // Filtro de Região (Mapa)
+    if (currentRegionFilter !== 'all') {
+        filtered = filtered.filter(ev => {
+            if (!ev.bairro) return false;
+            let bairroInfo = geoDicionario[ev.bairro.toLowerCase()];
+            return bairroInfo && bairroInfo.regiao === currentRegionFilter;
+        });
+    }
     
-    return eventosDatabase.filter(ev => {
-        if (!ev.bairro) return false;
-        let bairroInfo = geoDicionario[ev.bairro.toLowerCase()];
-        return bairroInfo && bairroInfo.regiao === currentRegionFilter;
-    });
+    return filtered;
 }
 
 function getTotalsForPeriod(startDate, endDate) {
@@ -304,7 +316,6 @@ function renderEventCard(ev) {
         ? { text: "text-sky-600", dot: "bg-sky-500", border: "border-sky-400" } 
         : { text: "text-emerald-600", dot: "bg-emerald-500", border: "border-emerald-400" };
     
-    // Agrupa participações para exibição
     let hierarquiaHTML = '';
     if (ev.participacoes && ev.participacoes.length > 0) {
         hierarquiaHTML = '<div class="border-t border-slate-100 pt-3 mb-3 space-y-2">';
@@ -374,15 +385,21 @@ function renderEventCard(ev) {
         hierarquiaHTML += '</div>';
     }
     
-    // Botões de Ação (CRUD)
+    // ETAPA 4: Botões de Ação controlados por RBAC
     let actionButtons = '';
-    if (App.Core.Security.canCreateEvent()) {
-        actionButtons = `
-            <div class="flex gap-2 mt-4 border-t border-slate-100 pt-3">
-                <button onclick="event.stopPropagation(); App.Eventos.CRUD.openEditModal('${ev.idEvento}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors">Editar Evento</button>
-                <button onclick="event.stopPropagation(); App.Eventos.CRUD.openPresenceModal('${ev.idEvento}', '${ev.participacoes[0].mobilizadorId || ''}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">Cadastrar Presença</button>
-            </div>
-        `;
+    let canEdit = App.Core.Security.canCreateEvent(); // 003 ou 999
+    let canCheckin = App.Core.Security.canCheckIn(); // 001, 003 ou 999
+    
+    if (canEdit || canCheckin) {
+        let btnsHTML = '';
+        if (canEdit) {
+            btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.openEditModal('${ev.idEvento}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors">Editar Evento</button>`;
+        }
+        if (canCheckin) {
+            btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.iniciarAtuacao('${ev.idEvento}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors">Iniciar Atuação</button>`;
+            btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.openPresenceModal('${ev.idEvento}', '${ev.participacoes[0].mobilizadorId || ''}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">Cadastrar Presença</button>`;
+        }
+        actionButtons = `<div class="flex gap-2 mt-4 border-t border-slate-100 pt-3 flex-wrap">${btnsHTML}</div>`;
     }
     
     return `

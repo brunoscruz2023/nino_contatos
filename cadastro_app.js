@@ -21,8 +21,8 @@ App.Cadastro.UI = {
 
         // Pega as funções da memória global (carregadas no initApp via getDictionaries)
         let funcoesArray = [];
-        if (window.dictsGlobal && window.dictsGlobal.funcoes) {
-            funcoesArray = window.dictsGlobal.funcoes;
+        if (window.dictsGlobal && window.dictsGlobal.funcoes_contato) {
+            funcoesArray = window.dictsGlobal.funcoes_contato.map(f => f.nome);
         }
 
         // Inicializa o componente de formulário passando o contexto e as funções
