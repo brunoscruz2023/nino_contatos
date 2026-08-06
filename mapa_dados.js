@@ -2,7 +2,6 @@
 window.App = window.App || {};
 App.Mapa = App.Mapa || {};
 
-// Estado Global (Temporário na window para compatibilidade com app.js legado)
 let geoDatabase = [];
 let allFunctionsList = new Set();
 let allTeamsList = new Set();
@@ -24,16 +23,11 @@ const svgStrokeColors = {
     "Região Leste": "#22d3ee", "Interior": "#64748b"
 };
 
-// ==========================================
-// MÓDULO: DADOS DO MAPA (App.Mapa.Dados)
-// ==========================================
 App.Mapa.Dados = {
     loadBairrosFromCache: function() {
         const cachedBairros = localStorage.getItem(`painel_bairros_cache_${CACHE_VERSION}`);
         if (cachedBairros) {
-            try {
-                geoDicionario = JSON.parse(cachedBairros);
-            } catch(e) { console.error("Erro cache bairros", e); }
+            try { geoDicionario = JSON.parse(cachedBairros); } catch(e) { console.error("Erro cache bairros", e); }
         }
     },
 
@@ -73,34 +67,24 @@ App.Mapa.Dados = {
     fetchSpreadsheetData: async function() {
         const statusEl = document.getElementById('status-text');
         const mobileStatusEl = document.getElementById('mobile-status-text');
-        if(statusEl) {
-            statusEl.innerText = "Sincronizando...";
-            statusEl.className = "text-xs font-semibold text-sky-500 mt-1 animate-pulse";
-        }
-        if(mobileStatusEl) {
-            mobileStatusEl.innerText = "Sincronizando";
-            mobileStatusEl.className = "text-[10px] font-medium text-sky-500 animate-pulse";
-        }
+        if(statusEl) { statusEl.innerText = "Sincronizando..."; statusEl.className = "text-xs font-semibold text-sky-500 mt-1 animate-pulse"; }
+        if(mobileStatusEl) { mobileStatusEl.innerText = "Sincronizando"; mobileStatusEl.className = "text-[10px] font-medium text-sky-500 animate-pulse"; }
 
         try {
-            let nivel = currentSession.nivel || '';
-            let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
-            
-            let isTotal = arrNivel.includes('000') || arrNivel.includes('TOTAL');
-            let isCard = arrNivel.includes('003') || arrNivel.includes('CARD');
-            let isZap = arrNivel.includes('002') || arrNivel.includes('ZAP');
+            // LÊ DIRETAMENTE A NOVA PERMISSÃO
+            let mapLvl = (currentSession && currentSession.funcoes) ? currentSession.funcoes.mapa : '000';
+            let isTotal = mapLvl === '999';
+            let isCard = mapLvl === '003';
+            let isZap = mapLvl === '002';
 
-            let queryCols = "A, B, E, F, G"; // Padrão: Apenas Nome
-            if (isTotal || isCard) {
-                queryCols = "A, B, C, D, E, F, G"; // Total e Card veem Fone e Ref
-            } else if (isZap) {
-                queryCols = "A, B, C, E, F, G"; // Zap ve Fone
-            }
+            let queryCols = "A, B, E, F, G"; 
+            if (isTotal || isCard) queryCols = "A, B, C, D, E, F, G"; 
+            else if (isZap) queryCols = "A, B, C, E, F, G"; 
             
             let query = `SELECT ${queryCols}`;
             
             if (currentSession && !currentSession.teams.includes("TODAS")) {
-                let conditions = currentSession.teams.map(team => `F = '${team}'`).join(' OR ');
+                let conditions = currentSession.teams.map(team => `UPPER(F) = '${team}'`).join(' OR ');
                 query += ` WHERE ${conditions}`;
             }
             
@@ -132,12 +116,11 @@ App.Mapa.Dados = {
             return acc;
         }, {});
 
-        let nivel = currentSession.nivel || '';
-        let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
-        
-        let isTotal = arrNivel.includes('000') || arrNivel.includes('TOTAL');
-        let isCard = arrNivel.includes('003') || arrNivel.includes('CARD');
-        let isZap = arrNivel.includes('002') || arrNivel.includes('ZAP');
+        // LÊ DIRETAMENTE A NOVA PERMISSÃO
+        let mapLvl = (currentSession && currentSession.funcoes) ? currentSession.funcoes.mapa : '000';
+        let isTotal = mapLvl === '999';
+        let isCard = mapLvl === '003';
+        let isZap = mapLvl === '002';
 
         json.table.rows.forEach((row, index) => {
             if (!row.c || !row.c[0] || !row.c[0].v) {
@@ -160,17 +143,17 @@ App.Mapa.Dados = {
             if (isTotal || isCard) {
                 fone = App.Core.Utils.formatPhone(row.c[idx] ? row.c[idx].v : ""); idx++;
                 ref = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : ""; idx++;
-                funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
-                equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
+                funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
+                equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
                 data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
             } else if (isZap) {
                 fone = App.Core.Utils.formatPhone(row.c[idx] ? row.c[idx].v : ""); idx++;
-                funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
-                equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
+                funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
+                equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
                 data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
             } else {
-                funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
-                equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : "Não definida"; idx++;
+                funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
+                equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
                 data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
             }
             
@@ -213,7 +196,7 @@ App.Mapa.Dados = {
             });
         }
 
-        const cacheSuffix = currentSession.nivel || 'default';
+        const cacheSuffix = currentSession.funcoes.mapa || 'default';
         const cacheKey = currentSession.key || 'logado';
         try {
             localStorage.setItem(`painel_cache_${cacheKey}_${cacheSuffix}_${CACHE_VERSION}`, JSON.stringify(geoDatabase));
@@ -223,14 +206,8 @@ App.Mapa.Dados = {
 
         const statusEl = document.getElementById('status-text');
         const mobileStatusEl = document.getElementById('mobile-status-text');
-        if(statusEl) {
-            statusEl.innerText = "Tempo Real";
-            statusEl.className = "text-xs font-semibold text-emerald-500 mt-1";
-        }
-        if(mobileStatusEl) {
-            mobileStatusEl.innerText = "Online";
-            mobileStatusEl.className = "text-[10px] font-medium text-emerald-500";
-        }
+        if(statusEl) { statusEl.innerText = "Tempo Real"; statusEl.className = "text-xs font-semibold text-emerald-500 mt-1"; }
+        if(mobileStatusEl) { mobileStatusEl.innerText = "Online"; mobileStatusEl.className = "text-[10px] font-medium text-emerald-500"; }
 
         initMap();
         initMobileList(); 
@@ -243,30 +220,15 @@ App.Mapa.Dados = {
         const mobileStatusEl = document.getElementById('mobile-status-text');
         
         if (geoDatabase.length > 0) {
-            if(statusEl) {
-                statusEl.innerText = "Modo Offline (Cache)";
-                statusEl.className = "text-xs font-semibold text-rose-500 mt-1";
-            }
-            if(mobileStatusEl) {
-                mobileStatusEl.innerText = "Offline";
-                mobileStatusEl.className = "text-[10px] font-medium text-rose-500";
-            }
+            if(statusEl) { statusEl.innerText = "Modo Offline (Cache)"; statusEl.className = "text-xs font-semibold text-rose-500 mt-1"; }
+            if(mobileStatusEl) { mobileStatusEl.innerText = "Offline"; mobileStatusEl.className = "text-[10px] font-medium text-rose-500"; }
         } else {
-            if(statusEl) {
-                statusEl.innerText = "Erro ao carregar dados";
-                statusEl.className = "text-xs font-semibold text-rose-500 mt-1";
-            }
-            if(mobileStatusEl) {
-                mobileStatusEl.innerText = "Erro";
-                mobileStatusEl.className = "text-[10px] font-medium text-rose-500";
-            }
+            if(statusEl) { statusEl.innerText = "Erro ao carregar dados"; statusEl.className = "text-xs font-semibold text-rose-500 mt-1"; }
+            if(mobileStatusEl) { mobileStatusEl.innerText = "Erro"; mobileStatusEl.className = "text-[10px] font-medium text-rose-500"; }
         }
     }
 };
 
-// ==========================================
-// ALIASES GLOBAIS (Compatibilidade com app.js legado)
-// ==========================================
 window.loadBairrosFromCache = App.Mapa.Dados.loadBairrosFromCache;
 window.fetchBairrosFromNetwork = App.Mapa.Dados.fetchBairrosFromNetwork;
 window.fetchSpreadsheetData = App.Mapa.Dados.fetchSpreadsheetData;

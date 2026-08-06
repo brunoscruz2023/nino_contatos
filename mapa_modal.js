@@ -30,11 +30,10 @@ App.Mapa.Modal = {
         
         let detailsHTML = '';
         
-        let nivel = currentSession.nivel || '';
-        let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
-        let isTotal = arrNivel.includes('000') || arrNivel.includes('TOTAL');
-        let isCard = arrNivel.includes('003') || arrNivel.includes('CARD');
-        let isZap = arrNivel.includes('002') || arrNivel.includes('ZAP');
+        let mapLvl = (currentSession && currentSession.funcoes) ? currentSession.funcoes.mapa : '000';
+        let isTotal = mapLvl === '999';
+        let isCard = mapLvl === '003';
+        let isZap = mapLvl === '002';
         
         if ((isCard || isTotal) && contato.ref) {
             detailsHTML += `<div class="flex justify-between border-b border-slate-200 pb-2"><span class="font-semibold text-slate-500">Referência:</span><span class="text-slate-800 text-right">${contato.ref}</span></div>`;
@@ -77,12 +76,11 @@ App.Mapa.Modal = {
         const useGrouping = currentRegionFilter !== 'all' && regionHasSubzonas(currentRegionFilter);
         let modalHTML = '';
 
-        let nivel = currentSession.nivel || '';
-        let arrNivel = Array.isArray(nivel) ? nivel : [nivel.toString()];
-        let isTotal = arrNivel.includes('000') || arrNivel.includes('TOTAL');
-        let isCard = arrNivel.includes('003') || arrNivel.includes('CARD');
-        let isZap = arrNivel.includes('002') || arrNivel.includes('ZAP');
-        let isNome = arrNivel.includes('001') || arrNivel.includes('NOME');
+        let mapLvl = (currentSession && currentSession.funcoes) ? currentSession.funcoes.mapa : '000';
+        let isTotal = mapLvl === '999';
+        let isCard = mapLvl === '003';
+        let isZap = mapLvl === '002';
+        let isNome = mapLvl === '001';
         let temAcesso = isTotal || isCard || isZap || isNome;
 
         const buildBairroCard = (data) => {
@@ -157,7 +155,6 @@ App.Mapa.Modal = {
     }
 };
 
-// Aliases globais temporários para compatibilidade com o HTML e app.js legado
 window.toggleModalNomes = App.Mapa.Modal.toggleModalNomes;
 window.openContactModal = App.Mapa.Modal.openContactModal;
 window.closeContactModal = App.Mapa.Modal.closeContactModal;

@@ -16,7 +16,7 @@ App.Admin.CRUD = {
             <div class="max-w-4xl mx-auto p-4 md:p-8 w-full">
                 <div class="mb-6">
                     <h2 class="text-2xl font-bold text-slate-800">Gerenciamento de Acessos</h2>
-                    <p class="text-sm text-slate-500">Busque um contato pelo telefone para definir, editar ou resetar a senha e as permissões de acesso.</p>
+                    <p class="text-sm text-slate-500 mt-1">Busque um contato pelo telefone para definir ou editar as permissões de acesso.</p>
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
@@ -29,9 +29,7 @@ App.Admin.CRUD = {
                     </div>
                 </div>
 
-                <div id="admin-result-area" class="hidden">
-                    <!-- Dados do contato e formulário serão injetados aqui -->
-                </div>
+                <div id="admin-result-area" class="hidden"></div>
             </div>
         `;
 
@@ -64,7 +62,8 @@ App.Admin.CRUD = {
         if (!formattedPhone) return;
 
         resultArea.classList.remove('hidden');
-        resultArea.innerHTML = '<p class="text-center text-slate-500 animate-pulse py-8">Buscando contato...</p>';
+        resultArea.innerHTML = ''; 
+        App.UI.Loader.show();
 
         const payload = { action: 'lookupContactByPhone', phone: formattedPhone };
         try {
@@ -75,6 +74,8 @@ App.Admin.CRUD = {
                 });
             });
 
+            App.UI.Loader.hide();
+
             if (res.contact) {
                 this.state.foundContact = res.contact;
                 this.renderAccessForm(res.contact);
@@ -83,6 +84,7 @@ App.Admin.CRUD = {
                 resultArea.innerHTML = `<div class="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-600 font-medium text-sm">Nenhum contato encontrado com este telefone. Cadastre-o primeiro no mapa ou eventos.</div>`;
             }
         } catch (err) {
+            App.UI.Loader.hide();
             resultArea.innerHTML = `<div class="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-600 font-medium text-sm">Erro: ${err}</div>`;
         }
     },
@@ -91,28 +93,63 @@ App.Admin.CRUD = {
         const resultArea = document.getElementById('admin-result-area');
         const dicts = this.state.dictionaries;
 
-        // Faz o parse do código de acesso atual se existir
-        let currentCodes = { equipes: [], niveis: [], modulos: [] };
-        if (contact.codigoAcesso) {
-            const partes = contact.codigoAcesso.split(',');
-            if (partes.length === 3) {
-                currentCodes.equipes = partes[0].trim().match(/.{1,3}/g) || [];
-                currentCodes.niveis = partes[1].trim().match(/.{1,3}/g) || [];
-                currentCodes.modulos = partes[2].trim().match(/.{1,3}/g) || [];
-            }
+        let currentCodes = { mapa: '000', agenda: '000', cadastro: '000', admin: '000' };
+        if (contact.codigoAcesso && contact.codigoAcesso.length === 12) {
+            currentCodes.mapa = contact.codigoAcesso.substring(0, 3);
+            currentCodes.agenda = contact.codigoAcesso.substring(3, 6);
+            currentCodes.cadastro = contact.codigoAcesso.substring(6, 9);
+            currentCodes.admin = contact.codigoAcesso.substring(9, 12);
         }
 
-        const renderCheckboxes = (items, type, selectedCodes) => {
-            if(!items || items.length === 0) return '<p class="text-xs text-slate-400 italic">Nenhum item cadastrado na planilha.</p>';
+        let currentTeamCodes = [];
+        if (contact.equipe) {
+            let teamNames = contact.equipe.split(',').map(t => t.trim().toUpperCase());
+            teamNames.forEach(name => {
+                let found = dicts.equipes.find(e => e.nome.toString().toUpperCase().trim() === name);
+                if (found) currentTeamCodes.push(found.cod);
+            });
+        }
+
+        const renderCheckboxes = (items, selectedCodes) => {
+            if(!items || items.length === 0) return '<p class="text-xs text-slate-400 italic">Nenhuma equipe cadastrada.</p>';
             return items.map(item => {
                 const isChecked = selectedCodes.includes(item.cod) ? 'checked' : '';
                 return `
                     <label class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100">
-                        <input type="checkbox" name="${type}" value="${item.cod}" class="rounded text-indigo-600 focus:ring-indigo-500" ${isChecked}>
+                        <input type="checkbox" name="equipes" value="${item.cod}" class="rounded text-indigo-600 focus:ring-indigo-500" ${isChecked}>
                         <span class="text-xs font-medium text-slate-700">${item.nome} <span class="text-slate-400">(${item.cod})</span></span>
                     </label>
                 `;
             }).join('');
+        };
+
+        const modOpts = { Mapa: [], Agenda: [], Cadastro: [], Admin: [] };
+        if (dicts.funcoes_modulos && dicts.funcoes_modulos.length > 0) {
+            dicts.funcoes_modulos.forEach(item => {
+                if (modOpts[item.modulo]) {
+                    modOpts[item.modulo].push({ val: item.cod, text: item.nome });
+                }
+            });
+        }
+
+        const renderSelect = (moduleName, options, selectedVal) => {
+            if (options.length === 0) {
+                options.push({ val: '000', text: 'Sem Acesso' });
+            }
+            
+            const optsHtml = options.map(opt => {
+                const isSelected = opt.val === selectedVal ? 'selected' : '';
+                return `<option value="${opt.val}" ${isSelected}>${opt.text}</option>`;
+            }).join('');
+            
+            return `
+                <div class="flex flex-col gap-1">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider">${moduleName}</label>
+                    <select id="select-${moduleName.toLowerCase()}" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                        ${optsHtml}
+                    </select>
+                </div>
+            `;
         };
 
         const senhaPlaceholder = contact.hasSenha ? "Deixe em branco para manter a senha atual" : "Digite a nova senha";
@@ -130,30 +167,18 @@ App.Admin.CRUD = {
                     </button>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                    <!-- Equipes -->
-                    <div>
-                        <h4 class="text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">Equipes</h4>
-                        <div class="flex flex-col gap-2">
-                            ${renderCheckboxes(dicts.equipes, 'equipes', currentCodes.equipes)}
-                        </div>
+                <div class="mb-6">
+                    <h4 class="text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">Equipes</h4>
+                    <div class="flex flex-col gap-2">
+                        ${renderCheckboxes(dicts.equipes, currentTeamCodes)}
                     </div>
+                </div>
 
-                    <!-- Níveis -->
-                    <div>
-                        <h4 class="text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">Níveis de Dados</h4>
-                        <div class="flex flex-col gap-2">
-                            ${renderCheckboxes(dicts.niveis, 'niveis', currentCodes.niveis)}
-                        </div>
-                    </div>
-
-                    <!-- Módulos -->
-                    <div>
-                        <h4 class="text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">Módulos do Sistema</h4>
-                        <div class="flex flex-col gap-2">
-                            ${renderCheckboxes(dicts.modulos, 'modulos', currentCodes.modulos)}
-                        </div>
-                    </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    ${renderSelect('Mapa', modOpts.Mapa, currentCodes.mapa)}
+                    ${renderSelect('Agenda', modOpts.Agenda, currentCodes.agenda)}
+                    ${renderSelect('Cadastro', modOpts.Cadastro, currentCodes.cadastro)}
+                    ${renderSelect('Admin', modOpts.Admin, currentCodes.admin)}
                 </div>
 
                 <div class="mt-6 pt-6 border-t border-slate-100">
@@ -178,37 +203,35 @@ App.Admin.CRUD = {
         if (!this.state.foundContact) return;
 
         const senha = document.getElementById('admin-password-input').value;
-        // Se preencheu a senha, valida se tem 6 dígitos. Se deixou vazio, tudo bem (mantém a atual).
         if (senha && (senha.length !== 6 || !/^\d+$/.test(senha))) {
             alert("A senha deve conter exatamente 6 dígitos numéricos, ou deixe em branco para manter a atual.");
             return;
         }
 
-        const getCheckedCodes = (name) => {
+        const valMapa = document.getElementById('select-mapa').value;
+        const valAgenda = document.getElementById('select-agenda').value;
+        const valCadastro = document.getElementById('select-cadastro').value;
+        const valAdmin = document.getElementById('select-admin').value;
+
+        const codigoAcesso = valMapa + valAgenda + valCadastro + valAdmin;
+
+        const getCheckedValues = (name) => {
             const checkboxes = document.querySelectorAll(`input[name="${name}"]:checked`);
             return Array.from(checkboxes).map(cb => cb.value);
         };
-
-        const equipesArr = getCheckedCodes('equipes');
-        const niveisArr = getCheckedCodes('niveis');
-        const modulosArr = getCheckedCodes('modulos');
-
-        if (equipesArr.length === 0 || niveisArr.length === 0 || modulosArr.length === 0) {
-            alert("Selecione pelo menos 1 opção em Equipes, Níveis e Módulos.");
-            return;
-        }
-
-        const codigoAcesso = equipesArr.join('') + ',' + niveisArr.join('') + ',' + modulosArr.join('');
+        const equipesArr = getCheckedValues('equipes');
+        const equipesCodigosStr = equipesArr.join('');
 
         const payload = {
             action: 'saveUserAccess',
             userId: this.state.foundContact.id,
-            senha: senha, // Pode ser string vazia
-            codigoAcesso: codigoAcesso
+            senha: senha,
+            codigoAcesso: codigoAcesso,
+            equipes: equipesCodigosStr
         };
 
         const resultArea = document.getElementById('admin-result-area');
-        resultArea.innerHTML = '<p class="text-center text-sky-500 animate-pulse py-8">Salvando alterações...</p>';
+        App.UI.Loader.show();
 
         try {
             const res = await new Promise((resolve, reject) => {
@@ -218,6 +241,9 @@ App.Admin.CRUD = {
                 });
             });
 
+            App.UI.Loader.hide();
+            App.UI.SuccessToast.show(1500);
+
             const senhaMsg = senha ? `Nova senha: <span class="font-bold text-slate-900 tracking-widest">${senha}</span>` : 'Senha anterior mantida.';
             
             resultArea.innerHTML = `
@@ -225,11 +251,12 @@ App.Admin.CRUD = {
                     <svg class="w-12 h-12 text-emerald-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     <h3 class="text-lg font-bold text-emerald-700 mb-2">Acesso Atualizado com Sucesso!</h3>
                     <p class="text-sm text-slate-600">${senhaMsg}</p>
-                    <p class="text-xs text-slate-400 mt-2">Código de Acesso: ${codigoAcesso}</p>
+                    <p class="text-xs text-slate-400 mt-2">Código de Permissões: ${codigoAcesso}</p>
                     <button onclick="App.Admin.CRUD.init()" class="mt-4 px-6 py-2 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-colors">Novo Cadastro</button>
                 </div>
             `;
         } catch (err) {
+            App.UI.Loader.hide();
             resultArea.innerHTML = `<div class="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-600 font-medium text-sm">Erro ao salvar: ${err}</div>`;
         }
     }

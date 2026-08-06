@@ -1,12 +1,7 @@
 // eventos_crud.js
 App.Eventos.CRUD = (function() {
     let presenceList = []; 
-    let currentEditingEventId = null; // Estado seguro para guardar o ID do evento no modal
-    
-    // CONFIGURAÇÃO DA URL BASE DO QUIOSQUE
-    // Deixe vazio ("") para usar a URL atual (requer que o projeto rode em um servidor http, ex: Live Server).
-    // Se for hospedar, coloque o domínio aqui (ex: "https://meupainel.com").
-    const APP_BASE_URL = ""; 
+    let currentEditingEventId = null;
 
     function init() {
         if (!App.Core.Security.canCreateEvent()) return;
@@ -34,7 +29,7 @@ App.Eventos.CRUD = (function() {
     }
 
     function openCreateModal() {
-        currentEditingEventId = null; // Novo evento, não há ID ainda
+        currentEditingEventId = null;
         const today = new Date().toLocaleDateString('pt-BR');
         renderEventModal("Criar Novo Evento", "Preencha os dados", {
             nome: "", data: today, tipo: "Desenvolvimento", bairro: "", descricao: "",
@@ -43,7 +38,7 @@ App.Eventos.CRUD = (function() {
     }
 
     function openEditModal(eventId) {
-        currentEditingEventId = eventId; // Guarda o ID no estado do módulo
+        currentEditingEventId = eventId;
         const ev = eventosDatabase.find(e => e.idEvento === eventId);
         if (!ev) return;
         const p = ev.participacoes[0] || {};
@@ -60,7 +55,6 @@ App.Eventos.CRUD = (function() {
         document.getElementById('contact-modal-bairro').innerText = subtitle;
         document.getElementById('contact-modal-wpp-btn').classList.add('hidden');
         
-        // Se for edição, já prepara a área do QR Code. Se for criação, avisa que precisa salvar antes.
         const qrSectionHTML = currentEditingEventId ? `
             <div class="border-t border-slate-200 pt-3 mt-3" id="qr-section">
                 <h4 class="text-sm font-bold text-slate-700 mb-2">QR Code de Presença</h4>
@@ -106,15 +100,15 @@ App.Eventos.CRUD = (function() {
                 <div class="border-t border-slate-200 pt-3 mt-3">
                     <h4 class="text-sm font-bold text-slate-700 mb-2">Organização</h4>
                     <div class="grid grid-cols-3 gap-2">
-                        <div>
+                        <div class="min-w-0">
                             <label class="block text-[10px] font-bold text-slate-500">Coord. (Tel)</label>
                             ${renderPhoneInput('coord', data.coord)}
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <label class="block text-[10px] font-bold text-slate-500">Superv. (Tel)</label>
                             ${renderPhoneInput('sup', data.sup)}
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <label class="block text-[10px] font-bold text-slate-500">Mobil. (Tel)</label>
                             ${renderPhoneInput('mob', data.mob)}
                         </div>
@@ -131,11 +125,7 @@ App.Eventos.CRUD = (function() {
         overlay.classList.add('flex');
     }
 
-    // ==========================================
-    // QR CODE LOGIC
-    // ==========================================
     async function generateQR() {
-        // Usa a variável de estado em vez de ler do DOM
         const eventId = currentEditingEventId;
         if (!eventId) {
             alert("Salve o evento antes de gerar o QR Code.");
@@ -152,21 +142,8 @@ App.Eventos.CRUD = (function() {
 
         App.Core.API.postEvent(payload, function(res) {
             if (res.status === 'success') {
-                // Garante a URL base correta (evita file:/// ao testar localmente)
-                let baseUrl = APP_BASE_URL && APP_BASE_URL.trim() !== "" ? APP_BASE_URL : window.location.origin + window.location.pathname;
-                
-                // Avisa o usuário se estiver rodando localmente (file://)
-                if (baseUrl.startsWith('file:///')) {
-                    qrDisplay.innerHTML = `
-                        <p class="text-xs text-rose-500 font-bold text-center">Atenção: Você está abrindo o sistema direto do computador (file:///).</p>
-                        <p class="text-[10px] text-slate-500 mt-1 text-center">O QR Code não funcionará no celular. Use um servidor local (ex: Live Server) ou hospede o sistema.</p>
-                    `;
-                    return;
-                }
-
-                const kioskUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'kiosk=true&event=' + eventId + '&token=' + res.token;
-                
-                // Usa tamanho 500x500 para garantir a leitura no mobile, anti-cache para evitar imagem branca
+                const baseUrl = window.location.origin + window.location.pathname;
+                const kioskUrl = baseUrl + '?kiosk=true&event=' + eventId + '&token=' + res.token;
                 const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(kioskUrl)}&margin=10&r=${Date.now()}`;
                 
                 qrDisplay.innerHTML = `
@@ -208,10 +185,10 @@ App.Eventos.CRUD = (function() {
         if (preId && contatosBase[preId]) prePhone = contatosBase[preId].telefone;
         
         return `
-            <div class="relative">
+            <div class="relative min-w-0">
                 <input type="text" class="hier-phone w-full px-2 py-1 border border-slate-300 rounded text-xs" placeholder="Telefone..." value="${prePhone}" onblur="App.Eventos.CRUD.searchHierContact(this, '${target}')">
                 <input type="hidden" id="ev-${target}" value="${preId || ''}">
-                <div class="text-[9px] text-slate-500 mt-0.5 hier-name"></div>
+                <div class="text-[9px] text-slate-500 mt-0.5 hier-name truncate"></div>
             </div>
         `;
     }
@@ -230,7 +207,7 @@ App.Eventos.CRUD = (function() {
         let formatted = App.Core.Utils.formatPhone(phone);
         let foundContact = null;
         for (let id in contatosBase) {
-            if (contatosBase[id].telephone === formatted) {
+            if (contatosBase[id].telefone === formatted) {
                 foundContact = { id: id, ...contatosBase[id] };
                 break;
             }
@@ -239,217 +216,105 @@ App.Eventos.CRUD = (function() {
         if (foundContact) {
             hiddenInput.value = foundContact.id;
             nameDiv.innerText = foundContact.nome + ' (' + foundContact.id + ')';
-            nameDiv.className = 'text-[9px] text-emerald-500 mt-0.5 hier-name';
+            nameDiv.className = 'text-[9px] text-emerald-500 mt-0.5 hier-name truncate';
         } else {
             hiddenInput.value = '';
             nameDiv.innerText = 'Inexistente';
-            nameDiv.className = 'text-[9px] text-rose-500 mt-0.5 hier-name';
+            nameDiv.className = 'text-[9px] text-rose-500 mt-0.5 hier-name truncate';
         }
     }
 
+    // ==========================================
+    // NOVA FUNÇÃO: INICIAR ATUAÇÃO (CHECK-IN GPS)
+    // ==========================================
+    async function iniciarAtuacao(eventId) {
+        App.UI.Loader.show();
+        const coords = await App.Core.Utils.getLocation();
+        const userId = App.Core.Security.getUserId();
+        
+        const payload = {
+            action: 'registrarLog',
+            userId: userId,
+            acao: 'INICIO_ATUACAO',
+            refId: eventId,
+            lat: coords.lat,
+            lng: coords.lng,
+            status: 'OK'
+        };
+        
+        App.Core.API.postEvent(payload, function(res) {
+            App.UI.Loader.hide();
+            if (res.status === 'success') {
+                App.UI.SuccessToast.show(1500);
+            } else {
+                alert("Erro ao registrar início de atuação: " + res.message);
+            }
+        });
+    }
+
+    // ==========================================
+    // PRESENÇA USANDO COMPONENTE REUTILIZÁVEL + GPS
+    // ==========================================
     function openPresenceModal(eventId, mobId) {
         const ev = eventosDatabase.find(e => e.idEvento === eventId);
         if (!ev) return;
-        presenceList = []; 
-
+        
         const overlay = document.getElementById('modal-contato-overlay');
         document.getElementById('contact-modal-name').innerText = "Cadastrar Presença";
         document.getElementById('contact-modal-bairro').innerText = ev.nome + " (" + ev.idEvento + ")";
         document.getElementById('contact-modal-wpp-btn').classList.add('hidden');
         
-        document.getElementById('contact-modal-details').innerHTML = `
-            <div class="space-y-3">
-                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                    <div class="grid grid-cols-2 gap-2 mb-2">
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500">Telefone</label>
-                            <input type="text" id="pres-phone" class="w-full px-2 py-1 border border-slate-300 rounded text-xs" onblur="App.Eventos.CRUD.lookupPresenceContact()" placeholder="219...">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500">Equipe</label>
-                            <input type="text" id="pres-equipe" class="w-full px-2 py-1 border border-slate-300 rounded text-xs">
-                        </div>
-                    </div>
-                    <div class="mb-2">
-                        <label class="block text-[10px] font-bold text-slate-500">Nome</label>
-                        <input type="text" id="pres-nome" class="w-full px-2 py-1 border border-slate-300 rounded text-xs">
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 mb-3">
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500">Bairro</label>
-                            <input type="text" id="pres-bairro" class="w-full px-2 py-1 border border-slate-300 rounded text-xs">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500">Referência</label>
-                            <input type="text" id="pres-ref" class="w-full px-2 py-1 border border-slate-300 rounded text-xs">
-                        </div>
-                    </div>
-                    <input type="hidden" id="pres-id" value="">
-                    <button id="btn-add-presence" onclick="App.Eventos.CRUD.addPresenceToList()" class="w-full bg-sky-600 text-white py-1.5 text-xs font-bold rounded-lg hover:bg-sky-700 transition-colors">Adicionar à Lista</button>
-                </div>
-                
-                <div id="presence-list-display" class="flex flex-wrap gap-1"></div>
-            </div>
-        `;
+        document.getElementById('contact-modal-details').innerHTML = '<div id="presence-form-container"></div>';
         
-        setupSaveButton('Salvar Presença Final', function() { savePresence(eventId, mobId); });
         setupCloseButton();
         overlay.classList.remove('hidden');
         overlay.classList.add('flex');
-    }
 
-    function lookupPresenceContact() {
-        let phone = document.getElementById('pres-phone').value;
-        let formatted = App.Core.Utils.formatPhone(phone);
-        
-        document.getElementById('pres-id').value = '';
-        document.getElementById('pres-nome').value = '';
-        document.getElementById('pres-bairro').value = '';
-        document.getElementById('pres-ref').value = '';
-        document.getElementById('pres-equipe').value = '';
-        document.getElementById('pres-equipe').readOnly = false;
+        App.UI.ContactForm.init('#presence-form-container', {
+            onSaveSuccess: async function(contactData) {
+                const coords = await App.Core.Utils.getLocation();
+                const userId = App.Core.Security.getUserId();
 
-        if (!formatted) return;
+                const payload = {
+                    action: 'updatePresence',
+                    eventId: eventId,
+                    mobId: mobId,
+                    presence: contactData.id,
+                    userId: userId,
+                    lat: coords.lat,
+                    lng: coords.lng
+                };
 
-        let foundContact = null;
-        for (let id in contatosBase) {
-            if (contatosBase[id].telephone === formatted) {
-                foundContact = { id: id, ...contatosBase[id] };
-                break;
-            }
-        }
-
-        if (foundContact) {
-            document.getElementById('pres-id').value = foundContact.id;
-            document.getElementById('pres-nome').value = foundContact.nome;
-            document.getElementById('pres-bairro').value = foundContact.bairro;
-            document.getElementById('pres-ref').value = foundContact.ref;
-            document.getElementById('pres-equipe').value = foundContact.equipe;
-        }
-    }
-
-    async function addPresenceToList() {
-        let phone = document.getElementById('pres-phone').value.trim();
-        let nome = document.getElementById('pres-nome').value.trim();
-        let bairro = document.getElementById('pres-bairro').value.trim();
-        let ref = document.getElementById('pres-ref').value.trim();
-        let equipe = document.getElementById('pres-equipe').value.trim();
-        let id = document.getElementById('pres-id').value;
-
-        if (!phone || !nome || !bairro) {
-            alert("Preencha Telefone, Nome e Bairro.");
-            return;
-        }
-
-        const addBtn = document.getElementById('btn-add-presence');
-        addBtn.innerText = 'Processando...';
-        addBtn.disabled = true;
-
-        let finalId = id;
-
-        try {
-            if (id) {
-                let originalContact = contatosBase[id];
-                let isModified = false;
-                if (originalContact) {
-                    if (originalContact.nome !== nome || 
-                        originalContact.bairro !== bairro || 
-                        originalContact.ref !== ref || 
-                        originalContact.equipe !== equipe || 
-                        originalContact.funcao !== "MOBILIZADOR(A)") {
-                        isModified = true;
-                    }
-                }
-                
-                if (isModified) {
-                    let payload = {
-                        action: 'updateContact',
-                        key: App.Core.Security.getAccessKey(),
-                        id: id,
-                        bairro: bairro, nome: nome, telephone: phone, ref: ref,
-                        funcao: "MOBILIZADOR(A)", equipe: equipe
-                    };
+                try {
                     await new Promise((resolve, reject) => {
-                        App.Core.API.postEvent(payload, function(data) {
-                            if (data.status === 'success') resolve(data);
-                            else reject(data);
+                        App.Core.API.postEvent(payload, function(res) {
+                            if (res.status === 'success') resolve(res);
+                            else reject(res.message || 'Erro ao salvar presença.');
                         });
                     });
-                    contatosBase[id] = { nome, bairro, telephone: App.Core.Utils.formatPhone(phone), ref, funcao: "MOBILIZADOR(A)", equipe };
+
+                    let evInDb = eventosDatabase.find(e => e.idEvento === eventId);
+                    if (evInDb) {
+                        let p = evInDb.participacoes.find(pa => pa.mobilizadorId === mobId);
+                        if (p) {
+                            if (!p.presentesIds.includes(contactData.id)) {
+                                p.presentesIds.push(contactData.id);
+                                p.qtdPresentes = p.presentesIds.length;
+                                evInDb.qtdPresentes = evInDb.participacoes.reduce((acc, curr) => acc + curr.qtdPresentes, 0);
+                            }
+                        }
+                    }
+
+                } catch (err) {
+                    alert("Contato salvo, mas erro ao registrar presença: " + err);
                 }
-            } else {
-                let payload = {
-                    action: 'createContact',
-                    key: App.Core.Security.getAccessKey(),
-                    bairro: bairro, nome: nome, telephone: phone, ref: ref,
-                    funcao: "MOBILIZADOR(A)", equipe: equipe
-                };
-                const res = await new Promise((resolve, reject) => {
-                    App.Core.API.postEvent(payload, function(data) {
-                        if (data.status === 'success') resolve(data);
-                        else reject(data);
-                    });
-                });
-                finalId = res.newId;
-                contatosBase[finalId] = { nome, bairro, telephone: App.Core.Utils.formatPhone(phone), ref, funcao: "MOBILIZADOR(A)", equipe };
-            }
-            
-            presenceList.push(finalId);
-            const display = document.getElementById('presence-list-display');
-            const badge = document.createElement('span');
-            badge.className = 'text-xs bg-slate-200 px-2 py-1 rounded flex items-center gap-1';
-            badge.innerHTML = `${nome} <svg onclick="this.parentElement.remove()" class="w-3 h-3 cursor-pointer text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>`;
-            badge.dataset.id = finalId;
-            display.appendChild(badge);
-
-            document.getElementById('pres-phone').value = '';
-            document.getElementById('pres-nome').value = '';
-            document.getElementById('pres-bairro').value = '';
-            document.getElementById('pres-ref').value = '';
-            document.getElementById('pres-equipe').value = '';
-            document.getElementById('pres-id').value = '';
-            document.getElementById('pres-phone').focus();
-
-        } catch (err) {
-            alert("Erro ao salvar contato: " + (err.message || "Falha na rede."));
-        } finally {
-            addBtn.innerText = 'Adicionar à Lista';
-            addBtn.disabled = false;
-        }
-    }
-
-    function savePresence(eventId, mobId) {
-        let ids = [];
-        document.querySelectorAll('#presence-list-display span').forEach(span => {
-            ids.push(span.dataset.id);
-        });
-
-        const payload = {
-            action: 'updatePresence',
-            key: App.Core.Security.getAccessKey(),
-            eventId: eventId,
-            mobId: mobId,
-            presence: ids.join(', ')
-        };
-        
-        const saveBtn = document.getElementById('btn-save-event');
-        saveBtn.innerText = 'Salvando...';
-        saveBtn.disabled = true;
-
-        App.Core.API.postEvent(payload, function(res) {
-            saveBtn.innerText = 'Salvar Presença';
-            saveBtn.disabled = false;
-            
-            if (res.status === 'success') {
-                closeModal();
-                try { localStorage.removeItem(`painel_cache_${currentSession.key}_default_v2`); } catch(e){}
-                fetchEventosData(); 
-            } else {
-                alert("Erro: " + res.message);
             }
         });
     }
 
+    // ==========================================
+    // SALVAMENTO DE EVENTOS
+    // ==========================================
     function saveEvent() {
         if (!validateEventForm()) return;
         const payload = {
@@ -551,7 +416,7 @@ App.Eventos.CRUD = (function() {
         const closeBtn = overlay.querySelector('button[onclick="App.Eventos.CRUD.closeModal()"]');
         if(closeBtn) closeBtn.setAttribute('onclick', 'closeContactModal()');
         
-        currentEditingEventId = null; // Limpa o estado ao fechar
+        currentEditingEventId = null;
     }
 
     return {
@@ -560,11 +425,10 @@ App.Eventos.CRUD = (function() {
         openEditModal: openEditModal,
         openPresenceModal: openPresenceModal,
         searchHierContact: searchHierContact,
-        lookupPresenceContact: lookupPresenceContact,
-        addPresenceToList: addPresenceToList,
         generateQR: generateQR,
         deactivateQR: deactivateQR,
-        closeModal: closeModal
+        closeModal: closeModal,
+        iniciarAtuacao: iniciarAtuacao 
     };
 })();
 

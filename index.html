@@ -26,7 +26,7 @@
             
             .mobile-header-sticky { position: relative !important; top: auto !important; z-index: 50 !important; background-color: #ffffff !important; box-shadow: 0 4px 10px rgba(0,0,0,0.03); flex-shrink: 0; }
             
-            #view-mapa:not(.hidden), #view-eventos:not(.hidden), #view-admin:not(.hidden) {
+            #view-mapa:not(.hidden), #view-eventos:not(.hidden), #view-admin:not(.hidden), #view-cadastro:not(.hidden) {
                 display: block !important;
                 flex: 1 1 0% !important;
                 min-height: 0 !important; 
@@ -272,8 +272,10 @@
         <div id="view-eventos" class="hidden flex-1 bg-slate-50 overflow-auto"></div>
         <!-- VIEW ADMIN -->
         <div id="view-admin" class="hidden flex-1 bg-slate-50 overflow-auto"></div>
+        <!-- VIEW CADASTRO -->
+        <div id="view-cadastro" class="hidden flex-1 bg-slate-50 overflow-auto"></div>
 
-        <!-- NOVA BARRA DE NAVEGAÇÃO INFERIOR COM FAB -->
+        <!-- BARRA DE NAVEGAÇÃO INFERIOR COM FAB -->
         <nav id="bottom-nav-bar" class="w-full bg-white border-t border-slate-100 z-50 flex-shrink-0 hidden">
             <div id="nav-left" class="flex-1 flex justify-around items-center h-full"></div>
             <div id="fab-container" class="relative w-20 flex justify-center items-center h-full">
@@ -355,6 +357,7 @@
     <script src="eventos_kiosk.js"></script>
     <script src="eventos_crud.js"></script>
     <script src="admin_crud.js"></script>
+    <script src="cadastro_app.js"></script>
     <script>
         var originalInitEventos = window.initEventos;
         window.initEventos = function() {
