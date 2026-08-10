@@ -28,9 +28,7 @@ App.Cadastro.UI = {
         // Inicializa o componente de formulário passando o contexto e as funções
         App.UI.ContactForm.init('#cadastro-form-container', {
             funcoes: funcoesArray,
-            onSaveSuccess: function() {
-                // O comportamento de limpar e focar já é tratado pelo SuccessToast e setTimeout no componente
-            }
+            onCancel: null // No cadastro direto, o botão Sair apenas limpa o formulário
         });
     }
 };

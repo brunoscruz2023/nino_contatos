@@ -32,8 +32,7 @@ App.Eventos.CRUD = (function() {
         currentEditingEventId = null;
         const today = new Date().toLocaleDateString('pt-BR');
         renderEventModal("Criar Novo Evento", "Preencha os dados", {
-            nome: "", data: today, tipo: "Desenvolvimento", bairro: "", descricao: "",
-            coord: "", sup: "", mob: ""
+            nome: "", data: today, tipo: "Desenvolvimento", bairro: "", descricao: "", rawJson: "[]"
         }, 'Salvar Evento', saveEvent);
     }
 
@@ -41,11 +40,10 @@ App.Eventos.CRUD = (function() {
         currentEditingEventId = eventId;
         const ev = eventosDatabase.find(e => e.idEvento === eventId);
         if (!ev) return;
-        const p = ev.participacoes[0] || {};
+        
         renderEventModal("Editar Evento", ev.idEvento, {
             nome: ev.nome, data: ev.date.toLocaleDateString('pt-BR'), tipo: ev.tipo, 
-            bairro: ev.bairro, descricao: ev.descricao,
-            coord: p.coordenadorId || "", sup: p.supervisorId || "", mob: p.mobilizadorId || ""
+            bairro: ev.bairro, descricao: ev.descricao, rawJson: ev.rawJson || "[]"
         }, 'Atualizar Evento', function() { updateEvent(eventId); });
     }
 
@@ -97,23 +95,7 @@ App.Eventos.CRUD = (function() {
                     <textarea id="ev-desc" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">${data.descricao}</textarea>
                 </div>
                 
-                <div class="border-t border-slate-200 pt-3 mt-3">
-                    <h4 class="text-sm font-bold text-slate-700 mb-2">Organização</h4>
-                    <div class="grid grid-cols-3 gap-2">
-                        <div class="min-w-0">
-                            <label class="block text-[10px] font-bold text-slate-500">Coord. (Tel)</label>
-                            ${renderPhoneInput('coord', data.coord)}
-                        </div>
-                        <div class="min-w-0">
-                            <label class="block text-[10px] font-bold text-slate-500">Superv. (Tel)</label>
-                            ${renderPhoneInput('sup', data.sup)}
-                        </div>
-                        <div class="min-w-0">
-                            <label class="block text-[10px] font-bold text-slate-500">Mobil. (Tel)</label>
-                            ${renderPhoneInput('mob', data.mob)}
-                        </div>
-                    </div>
-                </div>
+                <div id="hier-builder-container"></div>
                 
                 ${qrSectionHTML}
             </div>
@@ -123,6 +105,11 @@ App.Eventos.CRUD = (function() {
         setupCloseButton();
         overlay.classList.remove('hidden');
         overlay.classList.add('flex');
+        
+        App.UI.HierarchyBuilder.init('#hier-builder-container');
+        if (data.rawJson && data.rawJson !== "[]") {
+            App.UI.HierarchyBuilder.loadJson(data.rawJson);
+        }
     }
 
     async function generateQR() {
@@ -135,11 +122,7 @@ App.Eventos.CRUD = (function() {
         const qrDisplay = document.getElementById('qr-code-display');
         qrDisplay.innerHTML = '<p class="text-xs text-slate-500 animate-pulse">Gerando...</p>';
 
-        const payload = {
-            action: 'generateQRToken',
-            eventId: eventId
-        };
-
+        const payload = { action: 'generateQRToken', eventId: eventId };
         App.Core.API.postEvent(payload, function(res) {
             if (res.status === 'success') {
                 const baseUrl = window.location.origin + window.location.pathname;
@@ -162,11 +145,7 @@ App.Eventos.CRUD = (function() {
         const qrDisplay = document.getElementById('qr-code-display');
         qrDisplay.innerHTML = '<p class="text-xs text-slate-500 animate-pulse">Desativando...</p>';
 
-        const payload = {
-            action: 'deactivateQRToken',
-            eventId: eventId
-        };
-
+        const payload = { action: 'deactivateQRToken', eventId: eventId };
         App.Core.API.postEvent(payload, function(res) {
             if (res.status === 'success') {
                 qrDisplay.innerHTML = `
@@ -180,80 +159,67 @@ App.Eventos.CRUD = (function() {
         });
     }
 
-    function renderPhoneInput(target, preId) {
-        let prePhone = "";
-        if (preId && contatosBase[preId]) prePhone = contatosBase[preId].telefone;
-        
-        return `
-            <div class="relative min-w-0">
-                <input type="text" class="hier-phone w-full px-2 py-1 border border-slate-300 rounded text-xs" placeholder="Telefone..." value="${prePhone}" onblur="App.Eventos.CRUD.searchHierContact(this, '${target}')">
-                <input type="hidden" id="ev-${target}" value="${preId || ''}">
-                <div class="text-[9px] text-slate-500 mt-0.5 hier-name truncate"></div>
-            </div>
-        `;
-    }
-
-    function searchHierContact(inputEl, target) {
-        let phone = inputEl.value;
-        let nameDiv = inputEl.nextElementSibling.nextElementSibling; 
-        let hiddenInput = inputEl.nextElementSibling;
-        
-        if (!phone) {
-            hiddenInput.value = '';
-            nameDiv.innerText = '';
-            return;
-        }
-
-        let formatted = App.Core.Utils.formatPhone(phone);
-        let foundContact = null;
-        for (let id in contatosBase) {
-            if (contatosBase[id].telefone === formatted) {
-                foundContact = { id: id, ...contatosBase[id] };
-                break;
-            }
-        }
-
-        if (foundContact) {
-            hiddenInput.value = foundContact.id;
-            nameDiv.innerText = foundContact.nome + ' (' + foundContact.id + ')';
-            nameDiv.className = 'text-[9px] text-emerald-500 mt-0.5 hier-name truncate';
-        } else {
-            hiddenInput.value = '';
-            nameDiv.innerText = 'Inexistente';
-            nameDiv.className = 'text-[9px] text-rose-500 mt-0.5 hier-name truncate';
-        }
-    }
-
     // ==========================================
-    // NOVA FUNÇÃO: INICIAR ATUAÇÃO (CHECK-IN GPS)
+    // INICIAR ATUAÇÃO (AUTO CHECK-IN ORGANIZADOR)
     // ==========================================
     async function iniciarAtuacao(eventId) {
-        App.UI.Loader.show();
-        const coords = await App.Core.Utils.getLocation();
+        const ev = eventosDatabase.find(e => e.idEvento === eventId);
+        if (!ev) return;
+
         const userId = App.Core.Security.getUserId();
         
-        const payload = {
-            action: 'registrarLog',
-            userId: userId,
-            acao: 'INICIO_ATUACAO',
-            refId: eventId,
-            lat: coords.lat,
-            lng: coords.lng,
-            status: 'OK'
-        };
+        // Verifica se o usuário logado está na hierarquia do evento
+        let isParticipant = ev.participacoes.some(p => 
+            p.coordenadorId === userId || p.supervisorId === userId || p.mobilizadorId === userId
+        );
+
+        let mobIdToUse = userId;
         
-        App.Core.API.postEvent(payload, function(res) {
+        // Se for Admin (003/999) testando e não estiver na árvore, pega o primeiro mobilizador da árvore
+        if (!isParticipant) {
+            let p = ev.participacoes.find(pa => pa.mobilizadorId && pa.mobilizadorId !== "ND");
+            if (p) mobIdToUse = p.mobilizadorId;
+            else { alert("Nenhum mobilizador neste evento para testes."); return; }
+        }
+
+        App.UI.Loader.show();
+        const coords = await App.Core.Utils.getLocation();
+        
+        // 1. Registra o Auto-Check-in do Organizador (ele mesmo como presença)
+        const autoCheckinPayload = {
+            action: 'updatePresence',
+            eventId: eventId,
+            mobId: mobIdToUse,
+            presence: mobIdToUse, // O próprio organizador é o participante
+            userId: userId,
+            lat: coords.lat,
+            lng: coords.lng
+        };
+
+        try {
+            await new Promise((resolve, reject) => {
+                App.Core.API.postEvent(autoCheckinPayload, function(res) {
+                    if (res.status === 'success') resolve(res);
+                    else reject(res.message || 'Erro ao registrar atuação.');
+                });
+            });
+            
             App.UI.Loader.hide();
-            if (res.status === 'success') {
-                App.UI.SuccessToast.show(1500);
-            } else {
-                alert("Erro ao registrar início de atuação: " + res.message);
-            }
-        });
+            App.UI.SuccessToast.show(1000);
+            
+            // 2. Abre diretamente o modal de presença para cadastrar os participantes
+            setTimeout(() => {
+                openPresenceModal(eventId, mobIdToUse);
+            }, 1100);
+
+        } catch (err) {
+            App.UI.Loader.hide();
+            alert("Erro ao iniciar atuação: " + err);
+        }
     }
 
     // ==========================================
-    // PRESENÇA USANDO COMPONENTE REUTILIZÁVEL + GPS
+    // PRESENÇA USANDO COMPONENTE REUTILIZÁVEL
     // ==========================================
     function openPresenceModal(eventId, mobId) {
         const ev = eventosDatabase.find(e => e.idEvento === eventId);
@@ -271,6 +237,11 @@ App.Eventos.CRUD = (function() {
         overlay.classList.add('flex');
 
         App.UI.ContactForm.init('#presence-form-container', {
+            canEdit: true, // Ignora o bloqueio de RBAC para permitir o fluxo de presença
+            saveButtonText: "Confirmar Presença",
+            onCancel: function() {
+                App.Eventos.CRUD.closeModal();
+            },
             onSaveSuccess: async function(contactData) {
                 const coords = await App.Core.Utils.getLocation();
                 const userId = App.Core.Security.getUserId();
@@ -321,7 +292,7 @@ App.Eventos.CRUD = (function() {
             action: 'createEvent',
             key: App.Core.Security.getAccessKey(),
             eventData: getFormData(),
-            hierarquia: getHierarquiaData()
+            hierarquia: App.UI.HierarchyBuilder.getJson()
         };
         submitData(payload);
     }
@@ -333,7 +304,7 @@ App.Eventos.CRUD = (function() {
             key: App.Core.Security.getAccessKey(),
             eventId: eventId,
             eventData: getFormData(),
-            hierarquia: getHierarquiaData()
+            hierarquia: App.UI.HierarchyBuilder.getJson()
         };
         submitData(payload);
     }
@@ -355,15 +326,7 @@ App.Eventos.CRUD = (function() {
             data: document.getElementById('ev-data').value.trim(),
             tipo: document.getElementById('ev-tipo').value,
             bairro: document.getElementById('ev-bairro').value.trim(),
-            description: document.getElementById('ev-desc').value.trim()
-        };
-    }
-
-    function getHierarquiaData() {
-        return {
-            coordId: document.getElementById('ev-coord') ? document.getElementById('ev-coord').value.trim() : "",
-            supId: document.getElementById('ev-sup') ? document.getElementById('ev-sup').value.trim() : "",
-            mobId: document.getElementById('ev-mob') ? document.getElementById('ev-mob').value.trim() : ""
+            descricao: document.getElementById('ev-desc').value.trim()
         };
     }
 
@@ -371,12 +334,15 @@ App.Eventos.CRUD = (function() {
         const saveBtn = document.getElementById('btn-save-event');
         saveBtn.innerText = 'Salvando...';
         saveBtn.disabled = true;
+        App.UI.Loader.show();
 
         App.Core.API.postEvent(payload, function(res) {
+            App.UI.Loader.hide();
             saveBtn.innerText = 'Salvar Evento';
             saveBtn.disabled = false;
             
             if (res.status === 'success') {
+                App.UI.SuccessToast.show(1500);
                 closeModal();
                 try { localStorage.removeItem(`painel_cache_${currentSession.key}_default_v2`); } catch(e){}
                 fetchEventosData(); 
@@ -424,7 +390,6 @@ App.Eventos.CRUD = (function() {
         openCreateModal: openCreateModal,
         openEditModal: openEditModal,
         openPresenceModal: openPresenceModal,
-        searchHierContact: searchHierContact,
         generateQR: generateQR,
         deactivateQR: deactivateQR,
         closeModal: closeModal,
