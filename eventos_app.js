@@ -316,80 +316,36 @@ function renderEventCard(ev) {
         ? { text: "text-sky-600", dot: "bg-sky-500", border: "border-sky-400" } 
         : { text: "text-emerald-600", dot: "bg-emerald-500", border: "border-emerald-400" };
     
-    let hierarquiaHTML = '';
+    // Constrói o mapa de presenças a partir do array achatado para passar ao renderizador
+    let presencasMap = {};
     if (ev.participacoes && ev.participacoes.length > 0) {
-        hierarquiaHTML = '<div class="border-t border-slate-100 pt-3 mb-3 space-y-2">';
-        
-        let tree = {};
         ev.participacoes.forEach(p => {
-            let cId = p.coordenadorId || "ND";
-            let sId = p.supervisorId || "ND";
-            let mId = p.mobilizadorId || "ND";
-
-            if (!tree[cId]) tree[cId] = {};
-            if (!tree[cId][sId]) tree[cId][sId] = {};
-            if (!tree[cId][sId][mId]) {
-                tree[cId][sId][mId] = { qtdPresentes: 0, presentesIds: [] };
+            if (p.mobilizadorId && p.mobilizadorId !== "ND") {
+                presencasMap[p.mobilizadorId] = p.presentesIds;
             }
-            tree[cId][sId][mId].qtdPresentes += p.qtdPresentes;
-            tree[cId][sId][mId].presentesIds = tree[cId][sId][mId].presentesIds.concat(p.presentesIds);
         });
+    }
 
-        for (let cId in tree) {
-            let coordNome = cId === "ND" ? "Não definido" : (contatosBase[cId] ? contatosBase[cId].nome : cId);
-            hierarquiaHTML += `
-                <div class="border-l-2 border-indigo-300 pl-3">
-                    <div class="flex gap-2 text-xs">
-                        <span class="font-bold w-24 text-slate-400">Coordenador:</span>
-                        <span class="font-medium text-slate-700">${coordNome}</span>
-                    </div>
-            `;
-
-            for (let sId in tree[cId]) {
-                let supNome = sId === "ND" ? "Não definido" : (contatosBase[sId] ? contatosBase[sId].nome : sId);
-                hierarquiaHTML += `
-                    <div class="mt-2 border-l-2 border-sky-300 pl-3">
-                        <div class="flex gap-2 text-xs">
-                            <span class="font-bold w-24 text-slate-400">Supervisor:</span>
-                            <span class="font-medium text-slate-700">${supNome}</span>
-                        </div>
-                `;
-
-                for (let mId in tree[cId][sId]) {
-                    let mobNome = mId === "ND" ? "Não definido" : (contatosBase[mId] ? contatosBase[mId].nome : mId);
-                    let mobData = tree[cId][sId][mId];
-                    
-                    let pPresencaHTML = mobData.presentesIds.map(id => {
-                        const c = contatosBase[id];
-                        return c ? `<span class="text-xs bg-slate-100 px-2 py-1 rounded mr-1 mb-1 inline-block">${c.nome}</span>` : '';
-                    }).join('');
-
-                    hierarquiaHTML += `
-                        <div class="mt-2 border-l-2 border-emerald-300 pl-3">
-                            <div class="flex gap-2 text-xs">
-                                <span class="font-bold w-24 text-slate-400">Mobilizador:</span>
-                                <span class="font-medium text-slate-700">${mobNome}</span>
-                            </div>
-                            ${pPresencaHTML ? `
-                            <div class="flex gap-2 mt-1">
-                                <span class="font-bold w-24 text-slate-400 text-xs">Presentes (${mobData.qtdPresentes}):</span>
-                                <div class="flex-1 flex flex-wrap">${pPresencaHTML}</div>
-                            </div>` : ''}
-                        </div>
-                    `;
-                }
-                hierarquiaHTML += `</div>`; 
-            }
-            hierarquiaHTML += `</div>`; 
-        }
-        hierarquiaHTML += '</div>';
+    // Utiliza o novo método de visualização do componente reutilizável
+    let hierarquiaHTML = '';
+    if (ev.rawJson && ev.rawJson !== "[]") {
+        hierarquiaHTML = `<div class="border-t border-slate-100 pt-3 mb-3 space-y-2">` + 
+                         App.UI.HierarchyBuilder.renderReadOnlyHtml(ev.rawJson, presencasMap) + 
+                         `</div>`;
     }
     
-    // ETAPA 4: Botões de Ação controlados por RBAC
-    let actionButtons = '';
-    let canEdit = App.Core.Security.canCreateEvent(); // 003 ou 999
-    let canCheckin = App.Core.Security.canCheckIn(); // 001, 003 ou 999
+    // ETAPA 5: Bloqueio Histórico (Não permite editar/check-in em eventos passados, exceto Admin)
+    let evDate = new Date(ev.date);
+    evDate.setHours(0, 0, 0, 0);
+    let today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let isPast = evDate < today;
+    let isAdmin = currentSession && currentSession.funcoes && currentSession.funcoes.admin === '999';
+
+    let canEdit = (!isPast || isAdmin) ? App.Core.Security.canCreateEvent() : false;
+    let canCheckin = (!isPast || isAdmin) ? App.Core.Security.canCheckIn() : false;
     
+    let actionButtons = '';
     if (canEdit || canCheckin) {
         let btnsHTML = '';
         if (canEdit) {
@@ -397,7 +353,14 @@ function renderEventCard(ev) {
         }
         if (canCheckin) {
             btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.iniciarAtuacao('${ev.idEvento}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors">Iniciar Atuação</button>`;
-            btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.openPresenceModal('${ev.idEvento}', '${ev.participacoes[0].mobilizadorId || ''}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">Cadastrar Presença</button>`;
+            
+            // Proteção: Pega o primeiro mobilizador válido se existir
+            let firstMobId = '';
+            if (ev.participacoes && ev.participacoes.length > 0) {
+                let p = ev.participacoes.find(pa => pa.mobilizadorId && pa.mobilizadorId !== "ND");
+                if (p) firstMobId = p.mobilizadorId;
+            }
+            btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.openPresenceModal('${ev.idEvento}', '${firstMobId}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">Cadastrar Presença</button>`;
         }
         actionButtons = `<div class="flex gap-2 mt-4 border-t border-slate-100 pt-3 flex-wrap">${btnsHTML}</div>`;
     }

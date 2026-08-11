@@ -133,7 +133,8 @@ App.Core.API = {
     postEvent: function(payload, callback) {
         fetch(this.EVENTOS_POST_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
         })
         .then(function(res) { return res.json(); })
@@ -174,6 +175,83 @@ App.Core.UI.Modal = {
         overlay.classList.add('hidden');
         overlay.classList.remove('flex');
         document.getElementById('app-modal-actions').innerHTML = '';
+    }
+};
+
+// ==========================================
+// MÓDULO: TASK MANAGER (Motor de Tarefas)
+// ==========================================
+App.Core.TaskManager = {
+    getPendingTasks: function(userId) {
+        if (!App.Core.Security.canCheckIn() || !eventosDatabase || eventosDatabase.length === 0) return [];
+        
+        let tasks = [];
+        let today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        eventosDatabase.forEach(ev => {
+            let evDate = new Date(ev.date);
+            evDate.setHours(0, 0, 0, 0);
+            
+            if (evDate.getTime() === today.getTime()) {
+                let isParticipant = ev.participacoes.some(p => 
+                    p.coordenadorId === userId || p.supervisorId === userId || p.mobilizadorId === userId
+                );
+                
+                if (isParticipant) {
+                    tasks.push({
+                        id: ev.idEvento,
+                        type: 'EVENT_CHECKIN',
+                        label: 'Iniciar Atuação no Evento: ' + ev.nome,
+                        actionRef: ev.idEvento
+                    });
+                }
+            }
+        });
+        return tasks;
+    },
+
+    promptUserTasks: function() {
+        const userId = App.Core.Security.getUserId();
+        if (!userId || userId === 'LEGADO' || userId === 'ADMIN') return;
+
+        const tasks = this.getPendingTasks(userId);
+        if (tasks.length > 0) {
+            let bodyHtml = '<div class="space-y-2">';
+            tasks.forEach(task => {
+                bodyHtml += `<button onclick="App.Core.Router.executeTask('${task.id}', '${task.type}')" class="w-full text-left p-3 bg-slate-50 hover:bg-indigo-50 rounded-lg border border-slate-200 transition-colors">
+                    <span class="block text-sm font-bold text-slate-800">${task.label}</span>
+                    <span class="block text-xs text-indigo-600 mt-1">Clique para iniciar agora</span>
+                </button>`;
+            });
+            bodyHtml += '</div>';
+
+            App.Core.UI.Modal.open({
+                title: "Atuação Pendente",
+                subtitle: "Você tem tarefas agendadas para hoje.",
+                body: bodyHtml,
+                actions: [{ text: "Fechar", onClick: App.Core.UI.Modal.close, className: "w-full bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all" }]
+            });
+        }
+    }
+};
+
+// ==========================================
+// MÓDULO: ROUTER (Roteador de Ações)
+// ==========================================
+App.Core.Router = {
+    executeTask: function(taskId, taskType) {
+        App.Core.UI.Modal.close();
+        if (taskType === 'EVENT_CHECKIN') {
+            // Navega para a tela de Eventos
+            App.Layout.Shell.setActive('eventos');
+            // Aguarda a renderização e inicia a atuação
+            setTimeout(() => {
+                if (typeof App.Eventos.CRUD !== 'undefined') {
+                    App.Eventos.CRUD.iniciarAtuacao(taskId);
+                }
+            }, 500);
+        }
     }
 };
 
@@ -296,6 +374,9 @@ App.Core.Controller.initApp = async function() {
     if(cachedDicts) { try { window.dictsGlobal = JSON.parse(cachedDicts); } catch(e){} }
 
     await Promise.all(fetchPromises);
+
+    // Após carregar tudo, verifica se há tarefas pendentes
+    App.Core.TaskManager.promptUserTasks();
 };
 
 App.Core.UI.togglePasswordVisibility = function() {

@@ -11,6 +11,12 @@ let bolhaDatabase = {};
 const EVENTOS_SHEET_ID = '1MRycZz_03uglcwJqYs_G3Kzc2osx6S_z9zYxGMAzsNM'; 
 const EVENTOS_SHEET_NAME = 'Eventos';
 const BASE_CONTATOS_SHEET_NAME = 'Base_Contatos';
+const PRESENCAS_SHEET_NAME = 'Presencas';
+
+// Helper para limpar apóstrofos remanescentes da leitura do Sheets
+function cleanStr(val) {
+  return val ? val.toString().replace(/'/g, "").trim() : "";
+}
 
 // ==========================================
 // MÓDULO: DADOS DE EVENTOS (App.Eventos.Dados)
@@ -18,19 +24,21 @@ const BASE_CONTATOS_SHEET_NAME = 'Base_Contatos';
 App.Eventos.Dados = {
     fetchEventosData: async function(isPreload = false) {
         try {
-            // CORREÇÃO: Callbacks únicos para evitar colisão em requisições paralelas (Preload vs Init)
             const cbEv = 'cb_ev_' + Date.now();
             const cbBase = 'cb_bs_' + Date.now();
+            const cbPres = 'cb_ps_' + Date.now();
             
             const urlEventos = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbEv}&sheet=${encodeURIComponent(EVENTOS_SHEET_NAME)}`;
             const urlBase = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbBase}&sheet=${encodeURIComponent(BASE_CONTATOS_SHEET_NAME)}`;
+            const urlPresencas = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbPres}&sheet=${encodeURIComponent(PRESENCAS_SHEET_NAME)}`;
             
-            const [dataEventos, dataBase] = await Promise.all([
+            const [dataEventos, dataBase, dataPresencas] = await Promise.all([
                 App.Core.Utils.fetchJsonp(urlEventos, cbEv),
-                App.Core.Utils.fetchJsonp(urlBase, cbBase)
+                App.Core.Utils.fetchJsonp(urlBase, cbBase),
+                App.Core.Utils.fetchJsonp(urlPresencas, cbPres)
             ]);
             
-            this.processarDadosEventos(dataEventos, dataBase);
+            this.processarDadosEventos(dataEventos, dataBase, dataPresencas);
             
             try {
                 localStorage.setItem('eventos_cache_v1', JSON.stringify(eventosDatabase));
@@ -61,6 +69,7 @@ App.Eventos.Dados = {
             try {
                 eventosDatabase = JSON.parse(cachedEventos);
                 contatosBase = JSON.parse(cachedContatos);
+                window.contatosBase = contatosBase; // Expõe globalmente
                 return true;
             } catch(e) {
                 console.error("Erro ao ler cache de eventos", e);
@@ -70,65 +79,125 @@ App.Eventos.Dados = {
         return false;
     },
 
-    processarDadosEventos: function(jsonEventos, jsonBase) {
+    // Função recursiva para achatar a árvore JSON no formato de lista que a UI espera
+    extractParticipacoes: function(node, currentCoord, currentSup, presencasDoEvento) {
+        var participacoes = [];
+        if (!node) return participacoes;
+        
+        var tipo = (node.tipo || "").toLowerCase();
+        if (tipo.includes("coord")) currentCoord = node.id;
+        if (tipo.includes("sup")) currentSup = node.id;
+        
+        // Se for um mobilizador (folha da árvore)
+        if (tipo.includes("mob")) {
+            var presIds = presencasDoEvento[node.id] || [];
+            participacoes.push({
+                coordenadorId: currentCoord || "ND",
+                supervisorId: currentSup || "ND",
+                mobilizadorId: node.id,
+                presentesIds: presIds,
+                qtdPresentes: presIds.length
+            });
+        }
+        
+        // Se tiver filhos, continua a recursão
+        if (node.filhos && Array.isArray(node.filhos)) {
+            node.filhos.forEach(function(child) {
+                participacoes = participacoes.concat(App.Eventos.Dados.extractParticipacoes(child, currentCoord, currentSup, presencasDoEvento));
+            });
+        }
+        return participacoes;
+    },
+
+    processarDadosEventos: function(jsonEventos, jsonBase, jsonPresencas) {
+        // 1. Monta a base de contatos na memória
         contatosBase = {};
         if (jsonBase && jsonBase.table && jsonBase.table.rows) {
             jsonBase.table.rows.forEach(row => {
                 if (!row.c || !row.c[0]) return;
-                let id = row.c[25] && row.c[25].v ? row.c[25].v.toString().trim().toUpperCase() : "";
+                let id = row.c[25] && row.c[25].v ? cleanStr(row.c[25].v).toUpperCase() : "";
                 if (id) {
                     contatosBase[id] = {
-                        nome: row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "Desconhecido",
-                        bairro: row.c[0] && row.c[0].v ? row.c[0].v.toString().trim() : "",
+                        nome: row.c[1] && row.c[1].v ? cleanStr(row.c[1].v) : "Desconhecido",
+                        bairro: row.c[0] && row.c[0].v ? cleanStr(row.c[0].v) : "",
                         telefone: App.Core.Utils.formatPhone(row.c[2] && row.c[2].v ? row.c[2].v : ""),
-                        ref: row.c[3] && row.c[3].v ? row.c[3].v.toString().trim() : "",
-                        funcao: row.c[4] && row.c[4].v ? row.c[4].v.toString().trim() : "",
-                        equipe: row.c[5] && row.c[5].v ? row.c[5].v.toString().trim() : ""
+                        ref: row.c[3] && row.c[3].v ? cleanStr(row.c[3].v) : "",
+                        funcao: row.c[4] && row.c[4].v ? cleanStr(row.c[4].v) : "",
+                        equipe: row.c[5] && row.c[5].v ? cleanStr(row.c[5].v) : ""
                     };
                 }
             });
         }
+        window.contatosBase = contatosBase; // Expõe globalmente para o HierarchyBuilder
 
-        let eventosMap = {};
+        // 2. Processa a aba Presencas e agrupa por Evento -> Mobilizador -> [Participantes]
+        let presencasMap = {};
+        if (jsonPresencas && jsonPresencas.table && jsonPresencas.table.rows) {
+            jsonPresencas.table.rows.forEach(row => {
+                if (!row.c || !row.c[0]) return;
+                let evId = row.c[1] && row.c[1].v ? cleanStr(row.c[1].v) : "";
+                let mobId = row.c[2] && row.c[2].v ? cleanStr(row.c[2].v).toUpperCase() : "";
+                let partId = row.c[3] && row.c[3].v ? cleanStr(row.c[3].v).toUpperCase() : "";
+                
+                if (evId && mobId && partId) {
+                    if (!presencasMap[evId]) presencasMap[evId] = {};
+                    if (!presencasMap[evId][mobId]) presencasMap[evId][mobId] = [];
+                    presencasMap[evId][mobId].push(partId);
+                }
+            });
+        }
+
+        // 3. Processa os Eventos (1 linha por evento, com JSON)
+        eventosDatabase = [];
         if (jsonEventos && jsonEventos.table && jsonEventos.table.rows) {
             jsonEventos.table.rows.forEach((row, index) => {
                 if (!row.c || !row.c[0] || !row.c[0].v) return; 
                 
-                let idEvento = row.c[0].v.toString().trim();
-                let nome = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "";
+                let idEvento = cleanStr(row.c[0].v);
+                let nome = row.c[1] && row.c[1].v ? cleanStr(row.c[1].v) : "";
                 let data = row.c[2] && row.c[2].v ? row.c[2].v : "";
-                let tipo = row.c[3] && row.c[3].v ? row.c[3].v.toString().trim() : "";
-                let bairro = row.c[4] && row.c[4].v ? row.c[4].v.toString().trim() : "";
-                let coordId = row.c[5] && row.c[5].v ? row.c[5].v.toString().trim().toUpperCase() : "";
-                let supId = row.c[6] && row.c[6].v ? row.c[6].v.toString().trim().toUpperCase() : "";
-                let mobId = row.c[7] && row.c[7].v ? row.c[7].v.toString().trim().toUpperCase() : "";
-                let listaPresenca = row.c[8] && row.c[8].v ? row.c[8].v.toString().trim() : "";
-                let desc = row.c[9] && row.c[9].v ? row.c[9].v.toString().trim() : "";
+                let tipo = row.c[3] && row.c[3].v ? cleanStr(row.c[3].v) : "";
+                let bairro = row.c[4] && row.c[4].v ? cleanStr(row.c[4].v) : "";
+                
+                // Lê o JSON hierárquico da coluna F (índice 5) e remove apóstrofos antes do parse
+                let estruturaJsonStr = row.c[5] && row.c[5].v ? cleanStr(row.c[5].v) : "[]";
+                let arvoreHierarquica = [];
+                try {
+                    arvoreHierarquica = JSON.parse(estruturaJsonStr);
+                } catch (e) {
+                    console.error("Erro ao fazer parse do JSON do evento " + idEvento, e);
+                }
+                
+                let desc = row.c[7] && row.c[7].v ? cleanStr(row.c[7].v) : "";
 
                 let parsedDate = App.Core.Utils.parseCustomDate(data);
                 if (!parsedDate) return;
 
-                let presentesIds = listaPresenca.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-                let participacao = {
-                    coordenadorId: coordId, supervisorId: supId, mobilizadorId: mobId,
-                    presentesIds: presentesIds, qtdPresentes: presentesIds.length
-                };
+                // Achata a árvore para o formato de participacoes
+                let presencasDoEvento = presencasMap[idEvento] || {};
+                let participacoes = [];
+                
+                arvoreHierarquica.forEach(function(node) {
+                    participacoes = participacoes.concat(App.Eventos.Dados.extractParticipacoes(node, "ND", "ND", presencasDoEvento));
+                });
 
-                if (!eventosMap[idEvento]) {
-                    eventosMap[idEvento] = {
-                        idEvento, nome, date: parsedDate, tipo, bairro,
-                        descricao: desc, participacoes: [participacao],
-                        qtdPresentes: presentesIds.length
-                    };
-                } else {
-                    eventosMap[idEvento].participacoes.push(participacao);
-                    eventosMap[idEvento].qtdPresentes += presentesIds.length;
-                    if (!eventosMap[idEvento].descricao && desc) eventosMap[idEvento].descricao = desc;
-                }
+                // Calcula o total de presentes no evento inteiro
+                let qtdPresentes = participacoes.reduce((acc, curr) => acc + curr.qtdPresentes, 0);
+
+                eventosDatabase.push({
+                    idEvento: idEvento, 
+                    nome: nome, 
+                    date: parsedDate, 
+                    tipo: tipo, 
+                    bairro: bairro,
+                    descricao: desc, 
+                    participacoes: participacoes,
+                    qtdPresentes: qtdPresentes,
+                    rawJson: estruturaJsonStr // Necessário para o modal de edição
+                });
             });
         }
 
-        eventosDatabase = Object.values(eventosMap);
         this.calcularAgregacaoEventos();
     },
 
