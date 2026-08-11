@@ -71,7 +71,6 @@ App.Mapa.Dados = {
         if(mobileStatusEl) { mobileStatusEl.innerText = "Sincronizando"; mobileStatusEl.className = "text-[10px] font-medium text-sky-500 animate-pulse"; }
 
         try {
-            // LÊ DIRETAMENTE A NOVA PERMISSÃO
             let mapLvl = (currentSession && currentSession.funcoes) ? currentSession.funcoes.mapa : '000';
             let isTotal = mapLvl === '999';
             let isCard = mapLvl === '003';
@@ -84,7 +83,7 @@ App.Mapa.Dados = {
             let query = `SELECT ${queryCols}`;
             
             if (currentSession && !currentSession.teams.includes("TODAS")) {
-                let conditions = currentSession.teams.map(team => `UPPER(F) = '${team}'`).join(' OR ');
+                let conditions = currentSession.teams.map(team => `UPPER(F) LIKE '%${team}%'`).join(' OR ');
                 query += ` WHERE ${conditions}`;
             }
             
@@ -116,17 +115,13 @@ App.Mapa.Dados = {
             return acc;
         }, {});
 
-        // LÊ DIRETAMENTE A NOVA PERMISSÃO
         let mapLvl = (currentSession && currentSession.funcoes) ? currentSession.funcoes.mapa : '000';
         let isTotal = mapLvl === '999';
         let isCard = mapLvl === '003';
         let isZap = mapLvl === '002';
 
         json.table.rows.forEach((row, index) => {
-            if (!row.c || !row.c[0] || !row.c[0].v) {
-                console.warn(`Linha ${index + 2} ignorada: Coluna A (Bairro) está vazia.`);
-                return; 
-            }
+            if (!row.c || !row.c[0] || !row.c[0].v) return; 
             
             let valorBairro = row.c[0].v;
             if (typeof valorBairro !== 'string') return; 
@@ -136,7 +131,7 @@ App.Mapa.Dados = {
             let fone = "";
             let ref = "";
             let funcao = "";
-            let equipe = "";
+            let rawEquipe = "";
             let data = "";
 
             let idx = 2;
@@ -144,27 +139,27 @@ App.Mapa.Dados = {
                 fone = App.Core.Utils.formatPhone(row.c[idx] ? row.c[idx].v : ""); idx++;
                 ref = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim() : ""; idx++;
                 funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
-                equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
+                rawEquipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : ""; idx++;
                 data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
             } else if (isZap) {
                 fone = App.Core.Utils.formatPhone(row.c[idx] ? row.c[idx].v : ""); idx++;
                 funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
-                equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
+                rawEquipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : ""; idx++;
                 data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
             } else {
                 funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
-                equipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
+                rawEquipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : ""; idx++;
                 data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
             }
             
+            // Quebra a string de equipes em um array
+            let equipesArr = rawEquipe ? rawEquipe.split(',').map(e => e.trim()).filter(e => e.length > 0) : ["NÃO DEFINIDA"];
+            
             allFunctionsList.add(funcao);
-            allTeamsList.add(equipe);
+            equipesArr.forEach(e => allTeamsList.add(e));
 
             let textoFormatado = valorBairro.trim().toLowerCase();
-            if (!mapaBusca[textoFormatado]) {
-                console.warn(`Linha ${index + 2} ignorada: Bairro "${valorBairro}" não encontrado na aba Bairros.`);
-                return;
-            }
+            if (!mapaBusca[textoFormatado]) return;
 
             let geoInfo = geoDicionario[textoFormatado];
             let nomeRealDoBairro = mapaBusca[textoFormatado];
@@ -175,10 +170,8 @@ App.Mapa.Dados = {
             
             bairroAgrupamento[nomeRealDoBairro].total++;
             bairroAgrupamento[nomeRealDoBairro].funcoes[funcao] = (bairroAgrupamento[nomeRealDoBairro].funcoes[funcao] || 0) + 1;
-            bairroAgrupamento[nomeRealDoBairro].nomes.push({ nome: nomeContato, funcao: funcao, equipe: equipe, data: data, fone: fone, ref: ref });
+            bairroAgrupamento[nomeRealDoBairro].nomes.push({ nome: nomeContato, funcao: funcao, rawEquipe: rawEquipe, equipes: equipesArr, data: data, fone: fone, ref: ref });
         });
-
-        populateFilters();
 
         for (let bairro in bairroAgrupamento) {
             let dadosBairro = bairroAgrupamento[bairro];
@@ -195,6 +188,9 @@ App.Mapa.Dados = {
                 nomes: dadosBairro.nomes
             });
         }
+
+        // CORREÇÃO: populateFilters movido para depois da montagem do geoDatabase
+        populateFilters();
 
         const cacheSuffix = currentSession.funcoes.mapa || 'default';
         const cacheKey = currentSession.key || 'logado';
