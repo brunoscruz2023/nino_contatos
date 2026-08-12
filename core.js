@@ -111,9 +111,11 @@ App.Core.Security = {
         return currentSession ? currentSession.id : null;
     },
     hasModuleAccess: function(modulo) {
-        // Força verificações em minúsculas
+        if (!currentSession || !currentSession.funcoes) return false;
         var mod = modulo ? modulo.toLowerCase() : '';
-        return currentSession && currentSession.funcoes && currentSession.funcoes[mod] && currentSession.funcoes[mod] !== '000';
+        var val = currentSession.funcoes[mod];
+        // CORREÇÃO CRÍTICA: Ignora undefined. Só libera se existir e for diferente de '000'
+        return val !== undefined && val !== '000';
     },
     canCreateEvent: function() {
         return this.hasModuleAccess('agenda') && (currentSession.funcoes['agenda'] === '003' || currentSession.funcoes['agenda'] === '999');
