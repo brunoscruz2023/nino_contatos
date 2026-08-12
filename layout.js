@@ -77,16 +77,24 @@ App.Layout.Shell = {
             // Se há outros módulos, o FAB volta a ser contextual (definido no setActive)
             // e o Logout vai fixo para a direita
             
-            // Distribui os módulos (metade esquerda, metade direita)
-            let half = Math.floor(otherMods.length / 2);
-            let leftMods = otherMods.slice(0, half);
-            let rightMods = otherMods.slice(half);
+            // NOVA LÓGICA: Distribuição dinâmica para equilibrar os lados
+            let leftMods = [];
+            let rightMods = [];
+            
+            otherMods.forEach(mod => {
+                // Aloca no lado que estiver com menos botões no momento
+                if (leftMods.length <= rightMods.length) {
+                    leftMods.push(mod);
+                } else {
+                    rightMods.push(mod);
+                }
+            });
+            
+            // Adiciona o logout sempre no final do lado direito
+            rightMods.push('logout');
             
             leftMods.forEach(mod => navLeft.appendChild(this.createNavBtn(mod)));
             rightMods.forEach(mod => navRight.appendChild(this.createNavBtn(mod)));
-            
-            // Adiciona o logout sempre no final do lado direito
-            navRight.appendChild(this.createNavBtn('logout'));
         }
     },
 

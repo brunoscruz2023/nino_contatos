@@ -3,8 +3,8 @@
 // ==========================================
 // IDs e Nomes das Planilhas (Centralizado)
 // ==========================================
-var SHEET_ID = '1VGgM5QNBY0SiN3VuVYdQB78joPz9blvdrdHNQj9v73I'; // Planilha: Pessoal Campanha
-var SHEET_NAME = 'Página1'; // Aba de Contatos
+var SHEET_ID = '1VGgM5QNBY0SiN3VuVYdQB78joPz9blvdrdHNQj9v73I'; 
+var SHEET_NAME = 'Página1'; 
 var ACESSOS_SHEET_NAME = 'Acessos';
 var BAIRROS_SHEET_NAME = 'Bairros';
 var CACHE_VERSION = 'v2';
@@ -101,7 +101,7 @@ lastWeekStart.setDate(currentWeekStart.getDate() - 7);
 lastWeekStart.setHours(0, 0, 0, 0);
 
 // ==========================================
-// MÓDULO: SEGURANÇA E RBAC (App.Core.Security)
+// MÓDULO: SEGURANÇA E RBAC DINÂMICO (App.Core.Security)
 // ==========================================
 App.Core.Security = {
     getAccessKey: function() {
@@ -114,13 +114,20 @@ App.Core.Security = {
         return currentSession && currentSession.funcoes && currentSession.funcoes[modulo] && currentSession.funcoes[modulo] !== '000';
     },
     canCreateEvent: function() {
-        return this.hasModuleAccess('agenda') && (currentSession.funcoes.agenda === '003' || currentSession.funcoes.agenda === '999');
+        return this.hasModuleAccess('Agenda') && (currentSession.funcoes['Agenda'] === '003' || currentSession.funcoes['Agenda'] === '999');
     },
     canCheckIn: function() {
-        return this.hasModuleAccess('agenda') && ['001', '003', '999'].includes(currentSession.funcoes.agenda);
+        return this.hasModuleAccess('Agenda') && ['001', '003', '999'].includes(currentSession.funcoes['Agenda']);
     },
     canEditContact: function() {
-        return this.hasModuleAccess('cadastro') && (currentSession.funcoes.cadastro === '002' || currentSession.funcoes.cadastro === '999');
+        return this.hasModuleAccess('Cadastro') && (currentSession.funcoes['Cadastro'] === '002' || currentSession.funcoes['Cadastro'] === '999');
+    },
+    // Novos métodos dinâmicos para Materiais
+    canManageMaterials: function() {
+        return this.hasModuleAccess('Materiais') && ['003', '999'].includes(currentSession.funcoes['Materiais']);
+    },
+    canDistributeMaterial: function() {
+        return this.hasModuleAccess('Materiais') && ['002', '003', '999'].includes(currentSession.funcoes['Materiais']);
     }
 };
 
@@ -179,10 +186,10 @@ App.Core.UI.Modal = {
 };
 
 // ==========================================
-// MÓDULO: TASK MANAGER (Motor de Tarefas)
+// MÓDULO: TASK MANAGER (Motor de Tarefas Unificado)
 // ==========================================
 App.Core.TaskManager = {
-    getPendingTasks: function(userId) {
+    getPendingEventTasks: function(userId) {
         if (!App.Core.Security.canCheckIn() || !eventosDatabase || eventosDatabase.length === 0) return [];
         
         let tasks = [];
@@ -197,7 +204,6 @@ App.Core.TaskManager = {
                 let isParticipant = ev.participacoes.some(p => 
                     p.coordenadorId === userId || p.supervisorId === userId || p.mobilizadorId === userId
                 );
-                
                 if (isParticipant) {
                     tasks.push({
                         id: ev.idEvento,
@@ -211,28 +217,150 @@ App.Core.TaskManager = {
         return tasks;
     },
 
-    promptUserTasks: function() {
+    getPendingCustomTasks: async function(userId) {
+        const TASKS_SHEET_ID = '1MRycZz_03uglcwJqYs_G3Kzc2osx6S_z9zYxGMAzsNM'; 
+        const TASKS_SHEET_NAME = 'Tarefas';
+        const cb = 'cb_tasks_' + Date.now();
+        const url = `https://docs.google.com/spreadsheets/d/${TASKS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cb}&sheet=${encodeURIComponent(TASKS_SHEET_NAME)}`;
+        
+        try {
+            const data = await App.Core.Utils.fetchJsonp(url, cb);
+            let tasks = [];
+            if (data && data.table && data.table.rows) {
+                data.table.rows.forEach(row => {
+                    if (!row.c || !row.c[1]) return;
+                    let status = row.c[6] && row.c[6].v ? row.c[6].v.toString().trim().toLowerCase() : "";
+                    let respId = row.c[2] && row.c[2].v ? row.c[2].v.toString().replace(/'/g, "").trim().toUpperCase() : "";
+                    
+                    if (status === "pendente" && respId === userId) {
+                        let titulo = row.c[3] && row.c[3].v ? row.c[3].v.toString() : "Tarefa sem título";
+                        let taskId = row.c[1].v.toString().replace(/'/g, "").trim();
+                        tasks.push({ id: taskId, type: 'CUSTOM_TASK', label: 'Tarefa: ' + titulo, actionRef: taskId });
+                    }
+                });
+            }
+            return tasks;
+        } catch (e) { console.error("Erro ao buscar tarefas avulsas", e); return []; }
+    },
+
+    getPendingMaterialTasks: async function(userId) {
+        const MAT_SHEET_ID = '1MRycZz_03uglcwJqYs_G3Kzc2osx6S_z9zYxGMAzsNM'; 
+        const MAT_SHEET_NAME = 'Materiais_Movimentacao';
+        const cb = 'cb_mat_' + Date.now();
+        const url = `https://docs.google.com/spreadsheets/d/${MAT_SHEET_ID}/gviz/tq?tqx=responseHandler:${cb}&sheet=${encodeURIComponent(MAT_SHEET_NAME)}`;
+        
+        try {
+            const data = await App.Core.Utils.fetchJsonp(url, cb);
+            let tasks = [];
+            if (data && data.table && data.table.rows) {
+                data.table.rows.forEach(row => {
+                    if (!row.c || !row.c[1]) return;
+                    let tipo = row.c[2] && row.c[2].v ? row.c[2].v.toString().trim() : "";
+                    let status = row.c[8] && row.c[8].v ? row.c[8].v.toString().trim() : "";
+                    let receptorId = row.c[5] && row.c[5].v ? row.c[5].v.toString().replace(/'/g, "").trim().toUpperCase() : "";
+                    
+                    if (tipo === "DISTRIBUICAO" && status === "Pendente_Recebimento" && receptorId === userId) {
+                        let item = row.c[3] && row.c[3].v ? row.c[3].v.toString() : "Material";
+                        let qtd = row.c[4] && row.c[4].v ? row.c[4].v : 0;
+                        let transId = row.c[1].v.toString().replace(/'/g, "").trim();
+                        tasks.push({ id: transId, type: 'MATERIAL_RECEIPT', label: `Receber ${qtd}x ${item}`, actionRef: transId });
+                    }
+                });
+            }
+            return tasks;
+        } catch (e) { console.error("Erro ao buscar tarefas de material", e); return []; }
+    },
+
+    promptUserTasks: async function() {
         const userId = App.Core.Security.getUserId();
         if (!userId || userId === 'LEGADO' || userId === 'ADMIN') return;
 
-        const tasks = this.getPendingTasks(userId);
+        let tasks = this.getPendingEventTasks(userId);
+        const customTasks = await this.getPendingCustomTasks(userId);
+        const materialTasks = await this.getPendingMaterialTasks(userId); 
+        
+        tasks = tasks.concat(customTasks).concat(materialTasks); 
+
         if (tasks.length > 0) {
             let bodyHtml = '<div class="space-y-2">';
             tasks.forEach(task => {
+                // Limpeza visual: Removida a frase "Clique para iniciar agora"
                 bodyHtml += `<button onclick="App.Core.Router.executeTask('${task.id}', '${task.type}')" class="w-full text-left p-3 bg-slate-50 hover:bg-indigo-50 rounded-lg border border-slate-200 transition-colors">
                     <span class="block text-sm font-bold text-slate-800">${task.label}</span>
-                    <span class="block text-xs text-indigo-600 mt-1">Clique para iniciar agora</span>
                 </button>`;
             });
             bodyHtml += '</div>';
 
             App.Core.UI.Modal.open({
-                title: "Atuação Pendente",
-                subtitle: "Você tem tarefas agendadas para hoje.",
+                title: "Pendências",
+                subtitle: "Você tem tarefas, eventos ou materiais aguardando ação.",
                 body: bodyHtml,
                 actions: [{ text: "Fechar", onClick: App.Core.UI.Modal.close, className: "w-full bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all" }]
             });
         }
+    },
+
+    showTaskDetails: function(taskId) {
+        App.Core.UI.Modal.open({
+            title: "Detalhes da Tarefa",
+            subtitle: "ID: " + taskId,
+            body: `
+                <div class="space-y-3">
+                    <p class="text-sm text-slate-600">Descreva abaixo o que foi realizado nesta tarefa:</p>
+                    <textarea id="task-relato" rows="4" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Material entregue com sucesso. Pessoa não estava em casa, etc."></textarea>
+                </div>
+            `,
+            actions: [
+                {
+                    text: "Marcar como Concluída",
+                    onClick: async function() {
+                        const relato = document.getElementById('task-relato').value.trim();
+                        if (!relato) { alert("Por favor, descreva o que foi feito antes de concluir."); return; }
+
+                        App.UI.Loader.show();
+                        const coords = await App.Core.Utils.getLocation();
+                        const payload = { action: 'completeTask', taskId: taskId, userId: App.Core.Security.getUserId(), relato: relato, lat: coords.lat, lng: coords.lng };
+                        App.Core.API.postEvent(payload, function(res) {
+                            App.UI.Loader.hide();
+                            if (res.status === 'success') {
+                                App.UI.SuccessToast.show(1500);
+                                App.Core.UI.Modal.close();
+                                if (typeof tarefasDatabase !== 'undefined') {
+                                    let t = tarefasDatabase.find(t => t.id === taskId);
+                                    if (t) { t.status = "Concluído"; if (typeof renderEventosView === 'function') renderEventosView(); }
+                                }
+                            } else { alert("Erro: " + res.message); }
+                        });
+                    },
+                    className: "w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all mb-2"
+                },
+                { text: "Cancelar", onClick: App.Core.UI.Modal.close, className: "w-full bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all" }
+            ]
+        });
+    },
+
+    showMaterialReceiptModal: function(transId) {
+        App.Core.UI.Modal.open({
+            title: "Recebimento de Material",
+            subtitle: "Transação: " + transId,
+            body: `<p class="text-sm text-slate-600">Confirma o recebimento do material descrito nesta transação?</p>`,
+            actions: [
+                {
+                    text: "Confirmar Recebimento",
+                    onClick: async function() {
+                        App.UI.Loader.show();
+                        const payload = { action: 'confirmMaterialReceipt', transId: transId, userId: App.Core.Security.getUserId() };
+                        App.Core.API.postEvent(payload, function(res) {
+                            App.UI.Loader.hide();
+                            if (res.status === 'success') { App.UI.SuccessToast.show(1500); App.Core.UI.Modal.close(); } 
+                            else { alert("Erro: " + res.message); }
+                        });
+                    },
+                    className: "w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all mb-2"
+                },
+                { text: "Cancelar", onClick: App.Core.UI.Modal.close, className: "w-full bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all" }
+            ]
+        });
     }
 };
 
@@ -243,14 +371,12 @@ App.Core.Router = {
     executeTask: function(taskId, taskType) {
         App.Core.UI.Modal.close();
         if (taskType === 'EVENT_CHECKIN') {
-            // Navega para a tela de Eventos
             App.Layout.Shell.setActive('eventos');
-            // Aguarda a renderização e inicia a atuação
-            setTimeout(() => {
-                if (typeof App.Eventos.CRUD !== 'undefined') {
-                    App.Eventos.CRUD.iniciarAtuacao(taskId);
-                }
-            }, 500);
+            setTimeout(() => { if (typeof App.Eventos.CRUD !== 'undefined') App.Eventos.CRUD.iniciarAtuacao(taskId); }, 500);
+        } else if (taskType === 'CUSTOM_TASK') {
+            App.Core.TaskManager.showTaskDetails(taskId);
+        } else if (taskType === 'MATERIAL_RECEIPT') {
+            App.Core.TaskManager.showMaterialReceiptModal(taskId);
         }
     }
 };
@@ -264,7 +390,6 @@ App.Core.Controller.performLogin = async function() {
     var mainInput = document.getElementById('key-input').value.trim();
     var passInput = document.getElementById('password-input').value.trim();
     var errorEl = document.getElementById('login-error');
-    
     if (!mainInput) return;
     errorEl.classList.add('hidden');
 
@@ -296,20 +421,18 @@ App.Core.Controller.performLogin = async function() {
 App.Core.Controller.setupSession = function(sessionData) {
     currentSession = sessionData;
     sessionStorage.setItem('painel_session', JSON.stringify(currentSession));
-    
     document.getElementById('login-overlay').style.display = 'none';
     document.getElementById('key-input').value = '';
     document.getElementById('password-input').value = '';
     document.getElementById('password-wrapper').classList.add('hidden');
     document.getElementById('eye-btn').classList.add('hidden');
-    
     App.Core.Controller.initApp();
 };
 
 App.Core.Controller.logout = function() {
     sessionStorage.removeItem('painel_session');
     if (currentSession && currentSession.key) {
-        var cacheSuffix = currentSession.funcoes.mapa || 'default';
+        var cacheSuffix = currentSession.funcoes['Mapa'] || 'default';
         localStorage.removeItem(`painel_cache_${currentSession.key}_${cacheSuffix}_${CACHE_VERSION}`);
     }
     location.reload();
@@ -323,15 +446,14 @@ App.Core.Controller.initApp = async function() {
 
     var btnVerContatos = document.getElementById('btn-ver-contatos');
     if (btnVerContatos) {
-        if (!App.Core.Security.hasModuleAccess('mapa')) btnVerContatos.classList.add('hidden');
+        if (!App.Core.Security.hasModuleAccess('Mapa')) btnVerContatos.classList.add('hidden');
         else btnVerContatos.classList.remove('hidden');
     }
 
     App.Layout.Shell.init();
 
     var cacheKey = currentSession.key || 'logado';
-    var cacheSuffix = currentSession.funcoes.mapa || 'default';
-    
+    var cacheSuffix = currentSession.funcoes['Mapa'] || 'default';
     var cachedData = localStorage.getItem(`painel_cache_${cacheKey}_${cacheSuffix}_${CACHE_VERSION}`);
     var cachedFuncoes = localStorage.getItem(`painel_funcoes_${cacheKey}_${cacheSuffix}_${CACHE_VERSION}`);
     var cachedEquipes = localStorage.getItem(`painel_equipes_${cacheKey}_${cacheSuffix}_${CACHE_VERSION}`);
@@ -355,7 +477,7 @@ App.Core.Controller.initApp = async function() {
         App.Mapa.Dados.fetchSpreadsheetData()
     ];
 
-    if (App.Core.Security.hasModuleAccess('agenda')) {
+    if (App.Core.Security.hasModuleAccess('Agenda')) {
         App.Eventos.Dados.loadFromCache();
         fetchPromises.push(App.Eventos.Dados.fetchEventosData(true));
     }
@@ -374,8 +496,6 @@ App.Core.Controller.initApp = async function() {
     if(cachedDicts) { try { window.dictsGlobal = JSON.parse(cachedDicts); } catch(e){} }
 
     await Promise.all(fetchPromises);
-
-    // Após carregar tudo, verifica se há tarefas pendentes
     App.Core.TaskManager.promptUserTasks();
 };
 
