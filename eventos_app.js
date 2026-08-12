@@ -36,7 +36,7 @@ function initEventos() {
     
     renderEventosView();
     
-    if (eventosDatabase.length === 0) {
+    if (eventosDatabase.length === 0 && tarefasDatabase.length === 0) {
         fetchEventosData(false);
     }
 }
@@ -75,11 +75,10 @@ function setDayView(dayTimestamp) {
     renderEventosView();
 }
 
-// ETAPA 4: Filtro ABAC aplicado
+// ETAPA 4: Filtro ABAC aplicado para Eventos
 function getFilteredEventos() {
     let filtered = eventosDatabase;
 
-    // Se for Atuante (001) e tiver um ID real, filtra apenas os eventos onde participa
     if (currentSession && currentSession.funcoes && currentSession.funcoes.agenda === '001' && currentSession.id && currentSession.id !== 'LEGADO' && currentSession.id !== 'ADMIN') {
         const userId = currentSession.id;
         filtered = filtered.filter(ev => {
@@ -88,13 +87,28 @@ function getFilteredEventos() {
         });
     }
 
-    // Filtro de Região (Mapa)
     if (currentRegionFilter !== 'all') {
         filtered = filtered.filter(ev => {
             if (!ev.bairro) return false;
             let bairroInfo = geoDicionario[ev.bairro.toLowerCase()];
             return bairroInfo && bairroInfo.regiao === currentRegionFilter;
         });
+    }
+    
+    return filtered;
+}
+
+// NOVO: Filtro ABAC para Tarefas Avulsas
+function getFilteredTasks() {
+    if (!tarefasDatabase || tarefasDatabase.length === 0) return [];
+    let filtered = tarefasDatabase;
+    
+    const userId = App.Core.Security.getUserId();
+    if (!userId || userId === 'LEGADO') return [];
+    
+    let isAdmin = currentSession && currentSession.funcoes && (currentSession.funcoes.admin === '999' || currentSession.funcoes.agenda === '999');
+    if (!isAdmin) {
+        filtered = filtered.filter(t => t.responsavelId === userId);
     }
     
     return filtered;
@@ -145,6 +159,7 @@ function renderEventosView() {
     
     let html = '';
     let filteredEvents = getFilteredEventos();
+    let filteredTasks = getFilteredTasks(); 
     let startDate, endDate, title;
 
     if (currentViewMode === 'month') {
@@ -190,13 +205,25 @@ function renderEventosView() {
                 
                 if (isCurrentMonth) {
                     const dayEvents = filteredEvents.filter(e => e.date.getTime() === loopDate.getTime());
+                    const dayTasks = filteredTasks.filter(t => t.date.getTime() === loopDate.getTime()); 
                     let eventMarkers = '';
+                    
                     if (dayEvents.length > 0) {
                         dayEvents.forEach(ev => {
                             const color = ev.tipo.toLowerCase().startsWith('dev') ? 'bg-sky-500' : 'bg-emerald-500';
                             eventMarkers += `<div class="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${color} mx-auto mt-0.5"></div>`;
                         });
                     }
+                    if (dayTasks.length > 0) { 
+                        dayTasks.forEach(t => {
+                            if (t.status.toLowerCase() === 'pendente') {
+                                eventMarkers += `<div class="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-amber-500 mx-auto mt-0.5"></div>`;
+                            } else {
+                                eventMarkers += `<div class="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-slate-300 mx-auto mt-0.5"></div>`;
+                            }
+                        });
+                    }
+                    
                     const isToday = new Date().toDateString() === loopDate.toDateString();
                     html += `
                         <div onclick="setDayView(${loopDate.getTime()})" class="bg-white border ${isToday ? 'border-indigo-500' : 'border-slate-100'} rounded-lg p-1 md:p-2 min-h-[36px] md:min-h-[90px] cursor-pointer hover:bg-slate-50 transition-colors flex flex-col items-center">
@@ -217,6 +244,7 @@ function renderEventosView() {
             <div class="flex justify-end gap-4 mt-6 text-xs font-semibold text-slate-600">
                 <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-sky-500"></span> Desenvolvimento</span>
                 <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> Efetiva</span>
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500"></span> Tarefa</span>
             </div>
         `;
 
@@ -269,6 +297,7 @@ function renderEventosView() {
         let loopDate = new Date(startDate);
         while (loopDate <= endDate) {
             const dayEvents = filteredEvents.filter(e => e.date.getTime() === loopDate.getTime());
+            const dayTasks = filteredTasks.filter(t => t.date.getTime() === loopDate.getTime()); 
             
             if (currentViewMode === 'week') {
                 const isToday = new Date().toDateString() === loopDate.toDateString();
@@ -280,14 +309,17 @@ function renderEventosView() {
                 html += `<div>`;
             }
 
-            if (dayEvents.length > 0) {
+            if (dayEvents.length > 0 || dayTasks.length > 0) { 
                 html += `<div class="space-y-3">`;
                 dayEvents.forEach(ev => {
                     html += renderEventCard(ev);
                 });
+                dayTasks.forEach(t => { 
+                    html += renderTaskCard(t);
+                });
                 html += `</div>`;
             } else if (currentViewMode === 'day') {
-                html += `<p class="text-slate-400 text-sm text-center py-8">Nenhum evento agendado para este dia.</p>`;
+                html += `<p class="text-slate-400 text-sm text-center py-8">Nenhum evento ou tarefa agendado para este dia.</p>`;
             }
             
             html += `</div>`;
@@ -316,7 +348,6 @@ function renderEventCard(ev) {
         ? { text: "text-sky-600", dot: "bg-sky-500", border: "border-sky-400" } 
         : { text: "text-emerald-600", dot: "bg-emerald-500", border: "border-emerald-400" };
     
-    // Constrói o mapa de presenças a partir do array achatado para passar ao renderizador
     let presencasMap = {};
     if (ev.participacoes && ev.participacoes.length > 0) {
         ev.participacoes.forEach(p => {
@@ -326,7 +357,6 @@ function renderEventCard(ev) {
         });
     }
 
-    // Utiliza o novo método de visualização do componente reutilizável
     let hierarquiaHTML = '';
     if (ev.rawJson && ev.rawJson !== "[]") {
         hierarquiaHTML = `<div class="border-t border-slate-100 pt-3 mb-3 space-y-2">` + 
@@ -334,7 +364,6 @@ function renderEventCard(ev) {
                          `</div>`;
     }
     
-    // ETAPA 5: Bloqueio Histórico (Não permite editar/check-in em eventos passados, exceto Admin)
     let evDate = new Date(ev.date);
     evDate.setHours(0, 0, 0, 0);
     let today = new Date();
@@ -354,7 +383,6 @@ function renderEventCard(ev) {
         if (canCheckin) {
             btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.iniciarAtuacao('${ev.idEvento}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors">Iniciar Atuação</button>`;
             
-            // Proteção: Pega o primeiro mobilizador válido se existir
             let firstMobId = '';
             if (ev.participacoes && ev.participacoes.length > 0) {
                 let p = ev.participacoes.find(pa => pa.mobilizadorId && pa.mobilizadorId !== "ND");
@@ -392,6 +420,64 @@ function renderEventCard(ev) {
                     <div class="flex flex-col gap-4">
                         ${hierarquiaHTML}
                         ${ev.descricao ? `<p class="text-xs text-slate-500 italic">"${ev.descricao}"</p>` : ''}
+                        ${actionButtons}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// NOVA FUNÇÃO: Renderiza o card de Tarefa Avulsa
+function renderTaskCard(t) {
+    const isPending = t.status.toLowerCase() === 'pendente';
+    const uiColor = isPending 
+        ? { text: "text-amber-600", dot: "bg-amber-500", border: "border-amber-400" } 
+        : { text: "text-slate-500", dot: "bg-slate-400", border: "border-slate-300" };
+    
+    let actionButtons = '';
+    if (isPending) {
+        actionButtons = `<div class="flex gap-2 mt-4 border-t border-slate-100 pt-3 flex-wrap">
+            <button onclick="event.stopPropagation(); App.Core.TaskManager.showTaskDetails('${t.id}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">Concluir Tarefa</button>
+        </div>`;
+    } else {
+        actionButtons = `<div class="flex gap-2 mt-4 border-t border-slate-100 pt-3 flex-wrap">
+            <span class="flex-1 px-3 py-1.5 text-xs font-bold text-slate-400 border border-slate-200 rounded-lg text-center">Tarefa Concluída</span>
+        </div>`;
+    }
+
+    // Busca o nome do criador
+    let criadorNome = window.contatosBase && window.contatosBase[t.criadorId] ? window.contatosBase[t.criadorId].nome : null;
+    let criadorHTML = criadorNome ? `<p class="text-[10px] text-slate-400 mt-1">Atribuída por: ${criadorNome}</p>` : '';
+    
+    return `
+        <div class="accordion-card bg-white p-4 rounded-2xl border border-slate-100 shadow-sm cursor-pointer">
+            <div class="accordion-header flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl ${uiColor.dot} bg-opacity-10 flex items-center justify-center flex-shrink-0">
+                    <div class="w-3 h-3 rounded-full ${uiColor.dot}"></div>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-slate-800 truncate">${t.titulo}</p>
+                    <div class="flex items-center gap-1 text-[10px] font-bold mt-0.5 card-metrics">
+                        <span class="text-slate-500">Tarefa Avulsa</span>
+                        <span class="text-slate-300 mx-0">/</span>
+                        <span class="text-slate-500">${t.date.toLocaleDateString('pt-BR')}</span>
+                    </div>
+                    ${criadorHTML}
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <p class="text-2xl font-extrabold ${uiColor.text} leading-none">📋</p>
+                    <p class="text-[10px] text-slate-400 font-medium mt-1">${isPending ? 'Pendente' : 'Feita'}</p>
+                </div>
+                <svg class="chevron-icon w-5 h-5 text-slate-300 transition-transform duration-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path>
+                </svg>
+            </div>
+            <div class="accordion-content w-full text-sm text-slate-600" style="max-height: 0px; overflow: hidden; transition: max-height 0.3s ease-out;">
+                <div class="pt-3 mt-3 border-t border-slate-100">
+                    <div class="flex flex-col gap-4">
+                        ${t.descricao ? `<p class="text-xs text-slate-500 italic">"${t.descricao}"</p>` : ''}
+                        ${t.relato ? `<div class="bg-slate-50 p-2 rounded text-xs text-slate-600">Relato: ${t.relato}</div>` : ''}
                         ${actionButtons}
                     </div>
                 </div>

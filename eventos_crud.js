@@ -9,23 +9,209 @@ App.Eventos.CRUD = (function() {
         const monthControls = document.getElementById('month-controls');
         const subheaderContent = document.getElementById('subheader-content');
         
-        if (monthControls && !document.getElementById('btn-new-event')) {
-            const btn = document.createElement('button');
-            btn.id = 'btn-new-event';
-            btn.className = 'mt-2 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm';
-            btn.innerText = '+ Novo Evento';
-            btn.onclick = openCreateModal;
-            monthControls.appendChild(btn);
+        // Grupo de botões na visão Mensal
+        if (monthControls && !document.getElementById('btn-action-group')) {
+            const btnGroup = document.createElement('div');
+            btnGroup.id = 'btn-action-group';
+            btnGroup.className = 'flex gap-2 mt-2 w-full max-w-xs';
+            
+            const btnEvent = document.createElement('button');
+            btnEvent.id = 'btn-new-event';
+            btnEvent.className = 'flex-1 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm';
+            btnEvent.innerText = '+ Evento';
+            btnEvent.onclick = openCreateModal;
+            
+            const btnTask = document.createElement('button');
+            btnTask.id = 'btn-new-task';
+            btnTask.className = 'flex-1 px-4 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-colors shadow-sm';
+            btnTask.innerText = '+ Tarefa';
+            btnTask.onclick = openCreateTaskModal;
+            
+            btnGroup.appendChild(btnEvent);
+            btnGroup.appendChild(btnTask);
+            monthControls.appendChild(btnGroup);
+        }
+
+        // Grupo de botões na visão Semanal/Diária
+        if (subheaderContent && !document.getElementById('btn-action-group-sub')) {
+            const btnGroup = document.createElement('div');
+            btnGroup.id = 'btn-action-group-sub';
+            btnGroup.className = 'flex gap-2 mt-2';
+            
+            const btnEvent = document.createElement('button');
+            btnEvent.id = 'btn-new-event-sub';
+            btnEvent.className = 'flex-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm';
+            btnEvent.innerText = '+ Evento';
+            btnEvent.onclick = openCreateModal;
+            
+            const btnTask = document.createElement('button');
+            btnTask.id = 'btn-new-task-sub';
+            btnTask.className = 'flex-1 px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-colors shadow-sm';
+            btnTask.innerText = '+ Tarefa';
+            btnTask.onclick = openCreateTaskModal;
+            
+            btnGroup.appendChild(btnEvent);
+            btnGroup.appendChild(btnTask);
+            subheaderContent.appendChild(btnGroup);
+        }
+    }
+
+    // ==========================================
+    // MODAL DE CRIAÇÃO DE TAREFA AVULSA
+    // ==========================================
+    function openCreateTaskModal() {
+        const today = new Date().toLocaleDateString('pt-BR');
+        App.Core.UI.Modal.open({
+            title: "Nova Tarefa Avulsa",
+            subtitle: "Atribua uma micro-tarefa a um mobilizador",
+            body: `
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Telefone do Responsável</label>
+                        <input type="tel" id="task-resp-phone" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="(21) 99999-9999" oninput="App.Eventos.CRUD.handleTaskPhoneInput(this.value)" onblur="App.Eventos.CRUD.lookupTaskResp()">
+                        <p id="task-resp-name" class="text-xs mt-1 font-medium"></p>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Título</label>
+                        <input type="text" id="task-titulo" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Visitar liderança local">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Descrição</label>
+                        <textarea id="task-desc" rows="3" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Detalhes da tarefa..."></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Data Limite (DD/MM/AAAA)</label>
+                        <input type="text" id="task-data" value="${today}" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+            `,
+            actions: [
+                {
+                    id: 'btn-create-task',
+                    text: "Criar Tarefa",
+                    onClick: async function() {
+                        const phone = document.getElementById('task-resp-phone').value;
+                        const titulo = document.getElementById('task-titulo').value.trim();
+                        const desc = document.getElementById('task-desc').value.trim();
+                        const dataLimite = document.getElementById('task-data').value.trim();
+
+                        if (!phone || !titulo) {
+                            alert("Telefone e Título são obrigatórios.");
+                            return;
+                        }
+
+                        App.UI.Loader.show();
+                        const formattedPhone = App.Core.Utils.formatPhone(phone);
+                        const lookupPayload = { action: 'lookupContactByPhone', phone: formattedPhone };
+                        
+                        try {
+                            const lookupRes = await new Promise((resolve, reject) => {
+                                App.Core.API.postEvent(lookupPayload, function(data) {
+                                    if (data.status === 'success') resolve(data);
+                                    else reject('Erro na busca');
+                                });
+                            });
+
+                            if (!lookupRes.contact) {
+                                App.UI.Loader.hide();
+                                alert("Responsável não encontrado na base de contatos.");
+                                return;
+                            }
+
+                            const payload = {
+                                action: 'createTask',
+                                userId: lookupRes.contact.id,
+                                titulo: titulo,
+                                descricao: desc,
+                                dataLimite: dataLimite,
+                                createdBy: App.Core.Security.getUserId()
+                            };
+
+                            App.Core.API.postEvent(payload, function(res) {
+                                App.UI.Loader.hide();
+                                if (res.status === 'success') {
+                                    App.UI.SuccessToast.show(1500);
+                                    App.Core.UI.Modal.close();
+                                    try { localStorage.removeItem('eventos_cache_v1'); localStorage.removeItem('tarefas_cache_v1'); } catch(e){}
+                                    fetchEventosData();
+                                } else {
+                                    alert("Erro: " + res.message);
+                                }
+                            });
+                        } catch (err) {
+                            App.UI.Loader.hide();
+                            alert("Erro ao validar responsável.");
+                        }
+                    },
+                    className: "w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all mb-2 opacity-50 cursor-not-allowed pointer-events-none"
+                },
+                {
+                    text: "Cancelar",
+                    onClick: App.Core.UI.Modal.close,
+                    className: "w-full bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all"
+                }
+            ]
+        });
+        
+        // Garante que o botão comece desabilitado
+        const btnCreate = document.getElementById('btn-create-task');
+        if(btnCreate) btnCreate.disabled = true;
+    }
+
+    // NOVO: Manipula o input do telefone para desabilitar o botão se o campo for apagado
+    function handleTaskPhoneInput(value) {
+        const btnCreate = document.getElementById('btn-create-task');
+        const nameEl = document.getElementById('task-resp-name');
+        
+        if (!value) {
+            if(btnCreate) {
+                btnCreate.disabled = true;
+                btnCreate.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+            }
+            nameEl.innerText = "";
+        }
+    }
+
+    // NOVO: Validação do telefone em tempo real no modal de tarefa
+    function lookupTaskResp() {
+        const phone = document.getElementById('task-resp-phone').value;
+        const nameEl = document.getElementById('task-resp-name');
+        const btnCreate = document.getElementById('btn-create-task');
+        
+        if (!phone) {
+            if(btnCreate) {
+                btnCreate.disabled = true;
+                btnCreate.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+            }
+            nameEl.innerText = "";
+            return;
         }
         
-        if (subheaderContent && !document.getElementById('btn-new-event-sub')) {
-            const btn = document.createElement('button');
-            btn.id = 'btn-new-event-sub';
-            btn.className = 'mt-2 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm';
-            btn.innerText = '+ Novo';
-            btn.onclick = openCreateModal;
-            subheaderContent.appendChild(btn);
-        }
+        nameEl.innerText = "Buscando...";
+        nameEl.className = "text-xs mt-1 text-slate-500 animate-pulse";
+        
+        const formattedPhone = App.Core.Utils.formatPhone(phone);
+        App.Core.API.postEvent({ action: 'lookupContactByPhone', phone: formattedPhone }, function(res) {
+            if (res.status === 'success' && res.contact) {
+                nameEl.innerText = "Responsável: " + res.contact.nome;
+                nameEl.className = "text-xs mt-1 text-emerald-600 font-medium";
+                
+                // Habilita o botão de criar tarefa
+                if(btnCreate) {
+                    btnCreate.disabled = false;
+                    btnCreate.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+                }
+            } else {
+                nameEl.innerText = "Responsável não encontrado.";
+                nameEl.className = "text-xs mt-1 text-rose-500 font-medium";
+                
+                // Desabilita o botão
+                if(btnCreate) {
+                    btnCreate.disabled = true;
+                    btnCreate.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+                }
+            }
+        });
     }
 
     function openCreateModal() {
@@ -168,14 +354,12 @@ App.Eventos.CRUD = (function() {
 
         const userId = App.Core.Security.getUserId();
         
-        // Verifica se o usuário logado está na hierarquia do evento
         let isParticipant = ev.participacoes.some(p => 
             p.coordenadorId === userId || p.supervisorId === userId || p.mobilizadorId === userId
         );
 
         let mobIdToUse = userId;
         
-        // Se for Admin (003/999) testando e não estiver na árvore, pega o primeiro mobilizador da árvore
         if (!isParticipant) {
             let p = ev.participacoes.find(pa => pa.mobilizadorId && pa.mobilizadorId !== "ND");
             if (p) mobIdToUse = p.mobilizadorId;
@@ -185,12 +369,11 @@ App.Eventos.CRUD = (function() {
         App.UI.Loader.show();
         const coords = await App.Core.Utils.getLocation();
         
-        // 1. Registra o Auto-Check-in do Organizador (ele mesmo como presença)
         const autoCheckinPayload = {
             action: 'updatePresence',
             eventId: eventId,
             mobId: mobIdToUse,
-            presence: mobIdToUse, // O próprio organizador é o participante
+            presence: mobIdToUse, 
             userId: userId,
             lat: coords.lat,
             lng: coords.lng
@@ -207,7 +390,6 @@ App.Eventos.CRUD = (function() {
             App.UI.Loader.hide();
             App.UI.SuccessToast.show(1000);
             
-            // 2. Abre diretamente o modal de presença para cadastrar os participantes
             setTimeout(() => {
                 openPresenceModal(eventId, mobIdToUse);
             }, 1100);
@@ -237,7 +419,7 @@ App.Eventos.CRUD = (function() {
         overlay.classList.add('flex');
 
         App.UI.ContactForm.init('#presence-form-container', {
-            canEdit: true, // Ignora o bloqueio de RBAC para permitir o fluxo de presença
+            canEdit: true, 
             saveButtonText: "Confirmar Presença",
             onCancel: function() {
                 App.Eventos.CRUD.closeModal();
@@ -393,7 +575,10 @@ App.Eventos.CRUD = (function() {
         generateQR: generateQR,
         deactivateQR: deactivateQR,
         closeModal: closeModal,
-        iniciarAtuacao: iniciarAtuacao 
+        iniciarAtuacao: iniciarAtuacao,
+        openCreateTaskModal: openCreateTaskModal,
+        lookupTaskResp: lookupTaskResp,
+        handleTaskPhoneInput: handleTaskPhoneInput
     };
 })();
 

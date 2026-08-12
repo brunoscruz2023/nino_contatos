@@ -116,6 +116,78 @@ App.UI.SuccessToast = {
 };
 
 // ==========================================
+// COMPONENTE: STAT CARD (Card de Métrica Reutilizável)
+// ==========================================
+App.UI.StatCard = {
+    create: function(config) {
+        const color = config.color || 'text-indigo-600';
+        return `
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col items-center justify-center text-center h-full">
+                <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">${config.title || 'Métrica'}</p>
+                <p class="text-4xl font-extrabold ${color} mt-2">${config.value || 0}</p>
+            </div>
+        `;
+    }
+};
+
+// ==========================================
+// COMPONENTE: PERIOD SELECTOR (Seletor de Período Reutilizável)
+// ==========================================
+App.UI.PeriodSelector = {
+    render: function(containerSelector, options, currentSelection, onChangeCallback) {
+        const container = document.querySelector(containerSelector);
+        if (!container) return;
+        
+        let html = '<div class="flex gap-2 flex-wrap justify-center mb-6">';
+        options.forEach(opt => {
+            const isActive = opt.value === currentSelection;
+            const activeClass = isActive ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200';
+            html += `<button data-period="${opt.value}" class="px-4 py-2 rounded-lg text-xs font-bold transition-colors ${activeClass}">${opt.label}</button>`;
+        });
+        html += '</div>';
+        
+        container.innerHTML = html;
+        
+        container.querySelectorAll('button[data-period]').forEach(btn => {
+            btn.addEventListener('click', function() {
+                onChangeCallback(this.getAttribute('data-period'));
+            });
+        });
+    }
+};
+
+// ==========================================
+// COMPONENTE: TAB NAV (Navegação por Abas Reutilizável)
+// ==========================================
+App.UI.TabNav = {
+    render: function(containerSelector, tabs, currentTabId, onChangeCallback) {
+        const container = document.querySelector(containerSelector);
+        if (!container) return;
+        
+        if (tabs.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+
+        let html = '<div class="flex border-b border-slate-200 mb-6 overflow-x-auto hide-scrollbar">';
+        tabs.forEach(tab => {
+            const isActive = tab.id === currentTabId;
+            const activeClass = isActive ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300';
+            html += `<button data-tab="${tab.id}" class="py-3 px-4 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${activeClass}">${tab.label}</button>`;
+        });
+        html += '</div>';
+        
+        container.innerHTML = html;
+        
+        container.querySelectorAll('button[data-tab]').forEach(btn => {
+            btn.addEventListener('click', function() {
+                onChangeCallback(this.getAttribute('data-tab'));
+            });
+        });
+    }
+};
+
+// ==========================================
 // COMPONENTE: CONTACT FORM (Formulário Reutilizável)
 // ==========================================
 App.UI.ContactForm = {
@@ -238,7 +310,6 @@ App.UI.ContactForm = {
         const searchBtn = this.container.querySelector('#form-search-btn');
         const clearBtn = this.container.querySelector('#form-clear-btn');
 
-        // Alterna os botões: esconde a lupa, mostra a borracha
         searchBtn.classList.add('hidden');
         clearBtn.classList.remove('hidden');
 
@@ -309,7 +380,6 @@ App.UI.ContactForm = {
                 this.clear(true);
                 this.container.querySelector('#form-phone').value = rawPhone;
                 
-                // Como o clear() acima re-exibe a lupa, precisamos escondê-la novamente e mostrar a borracha
                 searchBtn.classList.add('hidden');
                 clearBtn.classList.remove('hidden');
 
@@ -419,7 +489,6 @@ App.UI.ContactForm = {
         this.container.querySelector('#form-status-badge').classList.add('hidden');
         this.container.querySelector('#form-status-badge').innerText = "";
         
-        // Alterna os botões de volta: mostra a lupa, esconde a borracha
         const searchBtn = this.container.querySelector('#form-search-btn');
         const clearBtn = this.container.querySelector('#form-clear-btn');
         if(searchBtn) searchBtn.classList.remove('hidden');

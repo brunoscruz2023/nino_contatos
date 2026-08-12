@@ -29,12 +29,30 @@ App.Admin.CRUD = {
                     </div>
                 </div>
 
+                <!-- BLOCO ISOLADO: GESTÃO DE MATERIAIS -->
+                <div id="admin-materials-section" class="hidden bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-6">
+                    <h3 class="text-lg font-bold text-slate-700 mb-4">Gestão de Materiais</h3>
+                    <div class="flex flex-col md:flex-row gap-2">
+                        <button onclick="App.Admin.CRUD.openMaterialEntryModal()" class="flex-1 px-4 py-2 bg-sky-600 text-white text-xs font-bold rounded-lg hover:bg-sky-700 transition-colors shadow-sm">
+                            + Entrada de Material
+                        </button>
+                        <button onclick="App.Admin.CRUD.openMaterialDistributionModal()" class="flex-1 px-4 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-colors shadow-sm">
+                            + Distribuir Material
+                        </button>
+                    </div>
+                </div>
+
                 <div id="admin-result-area" class="hidden"></div>
             </div>
         `;
 
         if (!this.state.dictionaries) {
             await this.fetchDictionaries();
+        }
+
+        // Verifica RBAC dinâmico para mostrar o bloco de materiais
+        if (App.Core.Security.canDistributeMaterial() || App.Core.Security.canManageMaterials()) {
+            document.getElementById('admin-materials-section').classList.remove('hidden');
         }
     },
 
@@ -58,7 +76,6 @@ App.Admin.CRUD = {
         const phoneInput = document.getElementById('admin-phone-search').value;
         const formattedPhone = App.Core.Utils.formatPhone(phoneInput);
         const resultArea = document.getElementById('admin-result-area');
-        
         if (!formattedPhone) return;
 
         resultArea.classList.remove('hidden');
@@ -93,12 +110,13 @@ App.Admin.CRUD = {
         const resultArea = document.getElementById('admin-result-area');
         const dicts = this.state.dictionaries;
 
-        let currentCodes = { mapa: '000', agenda: '000', cadastro: '000', admin: '000' };
-        if (contact.codigoAcesso && contact.codigoAcesso.length === 12) {
-            currentCodes.mapa = contact.codigoAcesso.substring(0, 3);
-            currentCodes.agenda = contact.codigoAcesso.substring(3, 6);
-            currentCodes.cadastro = contact.codigoAcesso.substring(6, 9);
-            currentCodes.admin = contact.codigoAcesso.substring(9, 12);
+        // Parser dinâmico para o código de acesso atual
+        let currentCodes = {};
+        if (contact.codigoAcesso && dicts.modulos) {
+            let codStr = contact.codigoAcesso;
+            dicts.modulos.forEach((mod, index) => {
+                currentCodes[mod.nome] = codStr.substring(index * 3, (index * 3) + 3) || '000';
+            });
         }
 
         let currentTeamCodes = [];
@@ -123,20 +141,9 @@ App.Admin.CRUD = {
             }).join('');
         };
 
-        const modOpts = { Mapa: [], Agenda: [], Cadastro: [], Admin: [] };
-        if (dicts.funcoes_modulos && dicts.funcoes_modulos.length > 0) {
-            dicts.funcoes_modulos.forEach(item => {
-                if (modOpts[item.modulo]) {
-                    modOpts[item.modulo].push({ val: item.cod, text: item.nome });
-                }
-            });
-        }
-
+        // Geração dinâmica dos seletores de módulo
         const renderSelect = (moduleName, options, selectedVal) => {
-            if (options.length === 0) {
-                options.push({ val: '000', text: 'Sem Acesso' });
-            }
-            
+            if (options.length === 0) options.push({ val: '000', text: 'Sem Acesso' });
             const optsHtml = options.map(opt => {
                 const isSelected = opt.val === selectedVal ? 'selected' : '';
                 return `<option value="${opt.val}" ${isSelected}>${opt.text}</option>`;
@@ -152,8 +159,27 @@ App.Admin.CRUD = {
             `;
         };
 
+        // Agrupa funções por módulo dinamicamente
+        const modOpts = {};
+        if (dicts.modulos && dicts.modulos.length > 0) {
+            dicts.modulos.forEach(mod => { modOpts[mod.nome] = []; });
+        }
+        if (dicts.funcoes_modulos && dicts.funcoes_modulos.length > 0) {
+            dicts.funcoes_modulos.forEach(item => {
+                if (modOpts[item.modulo]) modOpts[item.modulo].push({ val: item.cod, text: item.nome });
+            });
+        }
+
         const senhaPlaceholder = contact.hasSenha ? "Deixe em branco para manter a senha atual" : "Digite a nova senha";
         const senhaAviso = contact.hasSenha ? '<p class="text-xs text-emerald-600 mt-2 font-medium">Este contato já possui senha cadastrada.</p>' : '<p class="text-xs text-slate-400 mt-2">Nenhuma senha cadastrada ainda. É necessário definir uma.</p>';
+
+        let modulosHtml = '<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">';
+        if (dicts.modulos && dicts.modulos.length > 0) {
+            dicts.modulos.forEach(mod => {
+                modulosHtml += renderSelect(mod.nome, modOpts[mod.nome] || [], currentCodes[mod.nome] || '000');
+            });
+        }
+        modulosHtml += '</div>';
 
         resultArea.innerHTML = `
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -174,12 +200,7 @@ App.Admin.CRUD = {
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    ${renderSelect('Mapa', modOpts.Mapa, currentCodes.mapa)}
-                    ${renderSelect('Agenda', modOpts.Agenda, currentCodes.agenda)}
-                    ${renderSelect('Cadastro', modOpts.Cadastro, currentCodes.cadastro)}
-                    ${renderSelect('Admin', modOpts.Admin, currentCodes.admin)}
-                </div>
+                ${modulosHtml}
 
                 <div class="mt-6 pt-6 border-t border-slate-100">
                     <label class="block text-sm font-bold text-slate-700 mb-2">Senha de Acesso (6 dígitos)</label>
@@ -208,12 +229,14 @@ App.Admin.CRUD = {
             return;
         }
 
-        const valMapa = document.getElementById('select-mapa').value;
-        const valAgenda = document.getElementById('select-agenda').value;
-        const valCadastro = document.getElementById('select-cadastro').value;
-        const valAdmin = document.getElementById('select-admin').value;
-
-        const codigoAcesso = valMapa + valAgenda + valCadastro + valAdmin;
+        // Montagem dinâmica do código de acesso
+        let codigoAcesso = "";
+        if (this.state.dictionaries.modulos && this.state.dictionaries.modulos.length > 0) {
+            this.state.dictionaries.modulos.forEach(mod => {
+                let val = document.getElementById(`select-${mod.nome.toLowerCase()}`).value;
+                codigoAcesso += val;
+            });
+        }
 
         const getCheckedValues = (name) => {
             const checkboxes = document.querySelectorAll(`input[name="${name}"]:checked`);
@@ -259,5 +282,195 @@ App.Admin.CRUD = {
             App.UI.Loader.hide();
             resultArea.innerHTML = `<div class="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-600 font-medium text-sm">Erro ao salvar: ${err}</div>`;
         }
+    },
+
+    // ==========================================
+    // MÓDULO DE MATERIAIS (UI)
+    // ==========================================
+    openMaterialEntryModal: function() {
+        App.Core.UI.Modal.open({
+            title: "Entrada de Material",
+            subtitle: "Registre a entrada de insumos na campanha",
+            body: `
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Item (Ex: Santinho, Camisa)</label>
+                        <input type="text" id="mat-item" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nome do material">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Quantidade</label>
+                        <input type="number" id="mat-quantidade" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: 10000">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Origem / Fornecedor</label>
+                        <input type="text" id="mat-origem" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Gráfica Central">
+                    </div>
+                </div>
+            `,
+            actions: [
+                {
+                    text: "Registrar Entrada",
+                    onClick: async function() {
+                        const item = document.getElementById('mat-item').value.trim();
+                        const quantidade = document.getElementById('mat-quantidade').value.trim();
+                        const origem = document.getElementById('mat-origem').value.trim();
+
+                        if (!item || !quantidade) { alert("Item e Quantidade são obrigatórios."); return; }
+
+                        App.UI.Loader.show();
+                        const payload = {
+                            action: 'registerMaterialTransaction',
+                            tipoMov: 'ENTRADA',
+                            item: item,
+                            quantidade: parseInt(quantidade),
+                            idOrigemDestino: origem,
+                            idResponsavel: App.Core.Security.getUserId(),
+                            refId: "",
+                            status: "Concluído"
+                        };
+
+                        App.Core.API.postEvent(payload, function(res) {
+                            App.UI.Loader.hide();
+                            if (res.status === 'success') { App.UI.SuccessToast.show(1500); App.Core.UI.Modal.close(); } 
+                            else { alert("Erro: " + res.message); }
+                        });
+                    },
+                    className: "w-full bg-sky-600 text-white py-2.5 rounded-xl font-bold hover:bg-sky-700 transition-all mb-2"
+                },
+                { text: "Cancelar", onClick: App.Core.UI.Modal.close, className: "w-full bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all" }
+            ]
+        });
+    },
+
+    openMaterialDistributionModal: function() {
+        App.Core.UI.Modal.open({
+            title: "Distribuir Material",
+            subtitle: "Entregue material a um mobilizador",
+            body: `
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Telefone do Mobilizador</label>
+                        <input type="tel" id="mat-dist-phone" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="(21) 99999-9999" oninput="App.Admin.CRUD.handleMatDistPhoneInput(this.value)" onblur="App.Admin.CRUD.lookupMatDistResp()">
+                        <p id="mat-dist-name" class="text-xs mt-1 font-medium"></p>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Item</label>
+                        <input type="text" id="mat-dist-item" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Santinho">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Quantidade</label>
+                        <input type="number" id="mat-dist-quantidade" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: 500">
+                    </div>
+                </div>
+            `,
+            actions: [
+                {
+                    id: 'btn-dist-mat',
+                    text: "Distribuir",
+                    onClick: async function() {
+                        const phone = document.getElementById('mat-dist-phone').value;
+                        const item = document.getElementById('mat-dist-item').value.trim();
+                        const quantidade = parseInt(document.getElementById('mat-dist-quantidade').value);
+                        
+                        if (!phone || !item || !quantidade) { alert("Preencha todos os campos."); return; }
+                        
+                        App.UI.Loader.show();
+                        const formattedPhone = App.Core.Utils.formatPhone(phone);
+                        const lookupPayload = { action: 'lookupContactByPhone', phone: formattedPhone };
+                        try {
+                            const lookupRes = await new Promise((resolve, reject) => {
+                                App.Core.API.postEvent(lookupPayload, function(data) {
+                                    if (data.status === 'success') resolve(data);
+                                    else reject('Erro');
+                                });
+                            });
+                            
+                            if (!lookupRes.contact) { App.UI.Loader.hide(); alert("Mobilizador não encontrado."); return; }
+                            
+                            const balance = await App.Admin.CRUD.getMaterialBalance(item);
+                            if (quantidade > balance) { App.UI.Loader.hide(); alert("Saldo insuficiente. Disponível: " + balance + " " + item); return; }
+                            
+                            const payload = {
+                                action: 'distributeMaterial',
+                                item: item,
+                                quantidade: quantidade,
+                                idReceptor: lookupRes.contact.id,
+                                idResponsavel: App.Core.Security.getUserId()
+                            };
+                            
+                            App.Core.API.postEvent(payload, function(res) {
+                                App.UI.Loader.hide();
+                                if (res.status === 'success') { App.UI.SuccessToast.show(1500); App.Core.UI.Modal.close(); } 
+                                else { alert("Erro: " + res.message); }
+                            });
+                            
+                        } catch(e) { App.UI.Loader.hide(); alert("Erro ao processar."); }
+                    },
+                    className: "w-full bg-amber-500 text-white py-2.5 rounded-xl font-bold hover:bg-amber-600 transition-all mb-2 opacity-50 cursor-not-allowed pointer-events-none"
+                },
+                { text: "Cancelar", onClick: App.Core.UI.Modal.close, className: "w-full bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all" }
+            ]
+        });
+    },
+
+    handleMatDistPhoneInput: function(value) {
+        const btnDist = document.getElementById('btn-dist-mat');
+        const nameEl = document.getElementById('mat-dist-name');
+        if (!value) {
+            if(btnDist) { btnDist.disabled = true; btnDist.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
+            nameEl.innerText = "";
+        }
+    },
+
+    lookupMatDistResp: function() {
+        const phone = document.getElementById('mat-dist-phone').value;
+        const nameEl = document.getElementById('mat-dist-name');
+        const btnDist = document.getElementById('btn-dist-mat');
+        if (!phone) {
+            if(btnDist) { btnDist.disabled = true; btnDist.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
+            nameEl.innerText = "";
+            return;
+        }
+        nameEl.innerText = "Buscando...";
+        nameEl.className = "text-xs mt-1 text-slate-500 animate-pulse";
+        const formattedPhone = App.Core.Utils.formatPhone(phone);
+        App.Core.API.postEvent({ action: 'lookupContactByPhone', phone: formattedPhone }, function(res) {
+            if (res.status === 'success' && res.contact) {
+                nameEl.innerText = "Mobilizador: " + res.contact.nome;
+                nameEl.className = "text-xs mt-1 text-emerald-600 font-medium";
+                if(btnDist) { btnDist.disabled = false; btnDist.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
+            } else {
+                nameEl.innerText = "Mobilizador não encontrado.";
+                nameEl.className = "text-xs mt-1 text-rose-500 font-medium";
+                if(btnDist) { btnDist.disabled = true; btnDist.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
+            }
+        });
+    },
+
+    getMaterialBalance: async function(item) {
+        const SHEET_ID = '1MRycZz_03uglcwJqYs_G3Kzc2osx6S_z9zYxGMAzsNM';
+        const SHEET_NAME = 'Materiais_Movimentacao';
+        const cb = 'cb_bal_' + Date.now();
+        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:${cb}&sheet=${encodeURIComponent(SHEET_NAME)}`;
+        
+        try {
+            const data = await App.Core.Utils.fetchJsonp(url, cb);
+            let balance = 0;
+            if (data && data.table && data.table.rows) {
+                data.table.rows.forEach(row => {
+                    if (!row.c || !row.c[2]) return;
+                    let tipo = row.c[2] && row.c[2].v ? row.c[2].v.toString().trim() : "";
+                    let rowItem = row.c[3] && row.c[3].v ? row.c[3].v.toString().trim().toLowerCase() : "";
+                    let qtd = row.c[4] && row.c[4].v ? parseInt(row.c[4].v) : 0;
+                    let status = row.c[8] && row.c[8].v ? row.c[8].v.toString().trim() : "";
+                    
+                    if (rowItem === item.toLowerCase()) {
+                        if (tipo === "ENTRADA") { balance += qtd; } 
+                        else if (tipo === "DISTRIBUICAO" && (status === "Recebido" || status === "Pendente_Recebimento")) { balance -= qtd; }
+                    }
+                });
+            }
+            return balance;
+        } catch (e) { console.error("Erro ao buscar saldo de material", e); return 0; }
     }
 };

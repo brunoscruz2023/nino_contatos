@@ -6,12 +6,14 @@ App.Eventos = App.Eventos || {};
 let eventosDatabase = [];
 let contatosBase = {};
 let bolhaDatabase = {}; 
+let tarefasDatabase = []; 
 
 // Constantes de Planilha
 const EVENTOS_SHEET_ID = '1MRycZz_03uglcwJqYs_G3Kzc2osx6S_z9zYxGMAzsNM'; 
 const EVENTOS_SHEET_NAME = 'Eventos';
 const BASE_CONTATOS_SHEET_NAME = 'Base_Contatos';
 const PRESENCAS_SHEET_NAME = 'Presencas';
+const TASKS_SHEET_NAME = 'Tarefas'; 
 
 // Helper para limpar apóstrofos remanescentes da leitura do Sheets
 function cleanStr(val) {
@@ -27,35 +29,39 @@ App.Eventos.Dados = {
             const cbEv = 'cb_ev_' + Date.now();
             const cbBase = 'cb_bs_' + Date.now();
             const cbPres = 'cb_ps_' + Date.now();
+            const cbTasks = 'cb_tk_' + Date.now(); 
             
             const urlEventos = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbEv}&sheet=${encodeURIComponent(EVENTOS_SHEET_NAME)}`;
             const urlBase = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbBase}&sheet=${encodeURIComponent(BASE_CONTATOS_SHEET_NAME)}`;
             const urlPresencas = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbPres}&sheet=${encodeURIComponent(PRESENCAS_SHEET_NAME)}`;
+            const urlTasks = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbTasks}&sheet=${encodeURIComponent(TASKS_SHEET_NAME)}`; 
             
-            const [dataEventos, dataBase, dataPresencas] = await Promise.all([
+            const [dataEventos, dataBase, dataPresencas, dataTasks] = await Promise.all([
                 App.Core.Utils.fetchJsonp(urlEventos, cbEv),
                 App.Core.Utils.fetchJsonp(urlBase, cbBase),
-                App.Core.Utils.fetchJsonp(urlPresencas, cbPres)
+                App.Core.Utils.fetchJsonp(urlPresencas, cbPres),
+                App.Core.Utils.fetchJsonp(urlTasks, cbTasks) 
             ]);
             
-            this.processarDadosEventos(dataEventos, dataBase, dataPresencas);
+            this.processarDadosEventos(dataEventos, dataBase, dataPresencas, dataTasks);
             
             try {
                 localStorage.setItem('eventos_cache_v1', JSON.stringify(eventosDatabase));
                 localStorage.setItem('contatos_base_cache_v1', JSON.stringify(contatosBase));
-            } catch(e) { console.error("Erro ao salvar cache de eventos", e); }
+                localStorage.setItem('tarefas_cache_v1', JSON.stringify(tarefasDatabase)); 
+            } catch(e) { console.error("Erro ao salvar cache de eventos/tarefas", e); }
 
             const viewEventos = document.getElementById('view-eventos');
             if (!isPreload || (viewEventos && !viewEventos.classList.contains('hidden'))) {
                 renderEventosView();
             }
         } catch (e) {
-            console.error("Erro ao buscar eventos", e);
+            console.error("Erro ao buscar eventos/tarefas", e);
             if (!isPreload) {
-                if (eventosDatabase.length > 0) renderEventosView();
+                if (eventosDatabase.length > 0 || tarefasDatabase.length > 0) renderEventosView();
                 else {
                     const container = document.getElementById('view-eventos');
-                    if(container) container.innerHTML = '<p class="text-center text-rose-500 p-8">Erro ao carregar eventos. Verifique o console.</p>';
+                    if(container) container.innerHTML = '<p class="text-center text-rose-500 p-8">Erro ao carregar dados. Verifique o console.</p>';
                 }
             }
         }
@@ -64,15 +70,17 @@ App.Eventos.Dados = {
     loadFromCache: function() {
         const cachedEventos = localStorage.getItem('eventos_cache_v1');
         const cachedContatos = localStorage.getItem('contatos_base_cache_v1');
+        const cachedTarefas = localStorage.getItem('tarefas_cache_v1'); 
         
-        if (cachedEventos && cachedContatos) {
+        if (cachedEventos && cachedContatos && cachedTarefas) { 
             try {
                 eventosDatabase = JSON.parse(cachedEventos);
                 contatosBase = JSON.parse(cachedContatos);
-                window.contatosBase = contatosBase; // Expõe globalmente
+                tarefasDatabase = JSON.parse(cachedTarefas); 
+                window.contatosBase = contatosBase;
                 return true;
             } catch(e) {
-                console.error("Erro ao ler cache de eventos", e);
+                console.error("Erro ao ler cache de eventos/tarefas", e);
                 return false;
             }
         }
@@ -88,7 +96,6 @@ App.Eventos.Dados = {
         if (tipo.includes("coord")) currentCoord = node.id;
         if (tipo.includes("sup")) currentSup = node.id;
         
-        // Se for um mobilizador (folha da árvore)
         if (tipo.includes("mob")) {
             var presIds = presencasDoEvento[node.id] || [];
             participacoes.push({
@@ -100,7 +107,6 @@ App.Eventos.Dados = {
             });
         }
         
-        // Se tiver filhos, continua a recursão
         if (node.filhos && Array.isArray(node.filhos)) {
             node.filhos.forEach(function(child) {
                 participacoes = participacoes.concat(App.Eventos.Dados.extractParticipacoes(child, currentCoord, currentSup, presencasDoEvento));
@@ -109,7 +115,7 @@ App.Eventos.Dados = {
         return participacoes;
     },
 
-    processarDadosEventos: function(jsonEventos, jsonBase, jsonPresencas) {
+    processarDadosEventos: function(jsonEventos, jsonBase, jsonPresencas, jsonTasks) {
         // 1. Monta a base de contatos na memória
         contatosBase = {};
         if (jsonBase && jsonBase.table && jsonBase.table.rows) {
@@ -128,7 +134,7 @@ App.Eventos.Dados = {
                 }
             });
         }
-        window.contatosBase = contatosBase; // Expõe globalmente para o HierarchyBuilder
+        window.contatosBase = contatosBase;
 
         // 2. Processa a aba Presencas e agrupa por Evento -> Mobilizador -> [Participantes]
         let presencasMap = {};
@@ -159,7 +165,6 @@ App.Eventos.Dados = {
                 let tipo = row.c[3] && row.c[3].v ? cleanStr(row.c[3].v) : "";
                 let bairro = row.c[4] && row.c[4].v ? cleanStr(row.c[4].v) : "";
                 
-                // Lê o JSON hierárquico da coluna F (índice 5) e remove apóstrofos antes do parse
                 let estruturaJsonStr = row.c[5] && row.c[5].v ? cleanStr(row.c[5].v) : "[]";
                 let arvoreHierarquica = [];
                 try {
@@ -173,7 +178,6 @@ App.Eventos.Dados = {
                 let parsedDate = App.Core.Utils.parseCustomDate(data);
                 if (!parsedDate) return;
 
-                // Achata a árvore para o formato de participacoes
                 let presencasDoEvento = presencasMap[idEvento] || {};
                 let participacoes = [];
                 
@@ -181,7 +185,6 @@ App.Eventos.Dados = {
                     participacoes = participacoes.concat(App.Eventos.Dados.extractParticipacoes(node, "ND", "ND", presencasDoEvento));
                 });
 
-                // Calcula o total de presentes no evento inteiro
                 let qtdPresentes = participacoes.reduce((acc, curr) => acc + curr.qtdPresentes, 0);
 
                 eventosDatabase.push({
@@ -193,7 +196,37 @@ App.Eventos.Dados = {
                     descricao: desc, 
                     participacoes: participacoes,
                     qtdPresentes: qtdPresentes,
-                    rawJson: estruturaJsonStr // Necessário para o modal de edição
+                    rawJson: estruturaJsonStr
+                });
+            });
+        }
+
+        // 4. Processa as Tarefas Avulsas
+        tarefasDatabase = [];
+        if (jsonTasks && jsonTasks.table && jsonTasks.table.rows) {
+            jsonTasks.table.rows.forEach(row => {
+                if (!row.c || !row.c[1]) return;
+                let id = row.c[1] && row.c[1].v ? cleanStr(row.c[1].v) : "";
+                let respId = row.c[2] && row.c[2].v ? cleanStr(row.c[2].v).toUpperCase() : "";
+                let titulo = row.c[3] && row.c[3].v ? cleanStr(row.c[3].v) : "Tarefa Sem Título";
+                let desc = row.c[4] && row.c[4].v ? cleanStr(row.c[4].v) : "";
+                let dataLimite = row.c[5] && row.c[5].v ? row.c[5].v : "";
+                let status = row.c[6] && row.c[6].v ? cleanStr(row.c[6].v) : "Pendente";
+                let relato = row.c[7] && row.c[7].v ? cleanStr(row.c[7].v) : "";
+                let criadorId = row.c[8] && row.c[8].v ? cleanStr(row.c[8].v).toUpperCase() : ""; // NOVO
+
+                let parsedDate = App.Core.Utils.parseCustomDate(dataLimite);
+                if (!parsedDate) return; 
+
+                tarefasDatabase.push({
+                    id: id,
+                    responsavelId: respId,
+                    titulo: titulo,
+                    descricao: desc,
+                    date: parsedDate,
+                    status: status,
+                    relato: relato,
+                    criadorId: criadorId // NOVO
                 });
             });
         }
