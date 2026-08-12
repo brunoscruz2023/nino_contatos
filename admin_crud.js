@@ -115,7 +115,7 @@ App.Admin.CRUD = {
         if (contact.codigoAcesso && dicts.modulos) {
             let codStr = contact.codigoAcesso;
             dicts.modulos.forEach((mod, index) => {
-                currentCodes[mod.nome] = codStr.substring(index * 3, (index * 3) + 3) || '000';
+                currentCodes[mod.nome.toLowerCase()] = codStr.substring(index * 3, (index * 3) + 3) || '000';
             });
         }
 
@@ -162,11 +162,12 @@ App.Admin.CRUD = {
         // Agrupa funções por módulo dinamicamente
         const modOpts = {};
         if (dicts.modulos && dicts.modulos.length > 0) {
-            dicts.modulos.forEach(mod => { modOpts[mod.nome] = []; });
+            dicts.modulos.forEach(mod => { modOpts[mod.nome.toLowerCase()] = []; });
         }
         if (dicts.funcoes_modulos && dicts.funcoes_modulos.length > 0) {
             dicts.funcoes_modulos.forEach(item => {
-                if (modOpts[item.modulo]) modOpts[item.modulo].push({ val: item.cod, text: item.nome });
+                let modLower = item.modulo.toLowerCase();
+                if (modOpts[modLower]) modOpts[modLower].push({ val: item.cod, text: item.nome });
             });
         }
 
@@ -176,7 +177,8 @@ App.Admin.CRUD = {
         let modulosHtml = '<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">';
         if (dicts.modulos && dicts.modulos.length > 0) {
             dicts.modulos.forEach(mod => {
-                modulosHtml += renderSelect(mod.nome, modOpts[mod.nome] || [], currentCodes[mod.nome] || '000');
+                let modLower = mod.nome.toLowerCase();
+                modulosHtml += renderSelect(modLower, modOpts[modLower] || [], currentCodes[modLower] || '000');
             });
         }
         modulosHtml += '</div>';
