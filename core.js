@@ -111,23 +111,27 @@ App.Core.Security = {
         return currentSession ? currentSession.id : null;
     },
     hasModuleAccess: function(modulo) {
-        return currentSession && currentSession.funcoes && currentSession.funcoes[modulo] && currentSession.funcoes[modulo] !== '000';
+        if (!currentSession || !currentSession.funcoes) return false;
+        var mod = modulo ? modulo.toLowerCase() : '';
+        var val = currentSession.funcoes[mod];
+        // CORREÇÃO CRÍTICA: Ignora undefined. Só libera se existir e for diferente de '000'
+        return val !== undefined && val !== '000';
     },
     canCreateEvent: function() {
-        return this.hasModuleAccess('Agenda') && (currentSession.funcoes['Agenda'] === '003' || currentSession.funcoes['Agenda'] === '999');
+        return this.hasModuleAccess('agenda') && (currentSession.funcoes['agenda'] === '003' || currentSession.funcoes['agenda'] === '999');
     },
     canCheckIn: function() {
-        return this.hasModuleAccess('Agenda') && ['001', '003', '999'].includes(currentSession.funcoes['Agenda']);
+        return this.hasModuleAccess('agenda') && ['001', '003', '999'].includes(currentSession.funcoes['agenda']);
     },
     canEditContact: function() {
-        return this.hasModuleAccess('Cadastro') && (currentSession.funcoes['Cadastro'] === '002' || currentSession.funcoes['Cadastro'] === '999');
+        return this.hasModuleAccess('cadastro') && (currentSession.funcoes['cadastro'] === '002' || currentSession.funcoes['cadastro'] === '999');
     },
-    // Novos métodos dinâmicos para Materiais
+    // Módulos de Materiais
     canManageMaterials: function() {
-        return this.hasModuleAccess('Materiais') && ['003', '999'].includes(currentSession.funcoes['Materiais']);
+        return this.hasModuleAccess('materiais') && ['003', '999'].includes(currentSession.funcoes['materiais']);
     },
     canDistributeMaterial: function() {
-        return this.hasModuleAccess('Materiais') && ['002', '003', '999'].includes(currentSession.funcoes['Materiais']);
+        return this.hasModuleAccess('materiais') && ['002', '003', '999'].includes(currentSession.funcoes['materiais']);
     }
 };
 
@@ -284,7 +288,6 @@ App.Core.TaskManager = {
         if (tasks.length > 0) {
             let bodyHtml = '<div class="space-y-2">';
             tasks.forEach(task => {
-                // Limpeza visual: Removida a frase "Clique para iniciar agora"
                 bodyHtml += `<button onclick="App.Core.Router.executeTask('${task.id}', '${task.type}')" class="w-full text-left p-3 bg-slate-50 hover:bg-indigo-50 rounded-lg border border-slate-200 transition-colors">
                     <span class="block text-sm font-bold text-slate-800">${task.label}</span>
                 </button>`;
@@ -432,7 +435,7 @@ App.Core.Controller.setupSession = function(sessionData) {
 App.Core.Controller.logout = function() {
     sessionStorage.removeItem('painel_session');
     if (currentSession && currentSession.key) {
-        var cacheSuffix = currentSession.funcoes['Mapa'] || 'default';
+        var cacheSuffix = currentSession.funcoes['mapa'] || 'default';
         localStorage.removeItem(`painel_cache_${currentSession.key}_${cacheSuffix}_${CACHE_VERSION}`);
     }
     location.reload();
@@ -446,14 +449,14 @@ App.Core.Controller.initApp = async function() {
 
     var btnVerContatos = document.getElementById('btn-ver-contatos');
     if (btnVerContatos) {
-        if (!App.Core.Security.hasModuleAccess('Mapa')) btnVerContatos.classList.add('hidden');
+        if (!App.Core.Security.hasModuleAccess('mapa')) btnVerContatos.classList.add('hidden');
         else btnVerContatos.classList.remove('hidden');
     }
 
     App.Layout.Shell.init();
 
     var cacheKey = currentSession.key || 'logado';
-    var cacheSuffix = currentSession.funcoes['Mapa'] || 'default';
+    var cacheSuffix = currentSession.funcoes['mapa'] || 'default';
     var cachedData = localStorage.getItem(`painel_cache_${cacheKey}_${cacheSuffix}_${CACHE_VERSION}`);
     var cachedFuncoes = localStorage.getItem(`painel_funcoes_${cacheKey}_${cacheSuffix}_${CACHE_VERSION}`);
     var cachedEquipes = localStorage.getItem(`painel_equipes_${cacheKey}_${cacheSuffix}_${CACHE_VERSION}`);
@@ -477,7 +480,7 @@ App.Core.Controller.initApp = async function() {
         App.Mapa.Dados.fetchSpreadsheetData()
     ];
 
-    if (App.Core.Security.hasModuleAccess('Agenda')) {
+    if (App.Core.Security.hasModuleAccess('agenda')) {
         App.Eventos.Dados.loadFromCache();
         fetchPromises.push(App.Eventos.Dados.fetchEventosData(true));
     }
