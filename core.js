@@ -114,7 +114,6 @@ App.Core.Security = {
         if (!currentSession || !currentSession.funcoes) return false;
         var mod = modulo ? modulo.toLowerCase() : '';
         var val = currentSession.funcoes[mod];
-        // CORREÇÃO CRÍTICA: Ignora undefined. Só libera se existir e for diferente de '000'
         return val !== undefined && val !== '000';
     },
     canCreateEvent: function() {
@@ -126,7 +125,6 @@ App.Core.Security = {
     canEditContact: function() {
         return this.hasModuleAccess('cadastro') && (currentSession.funcoes['cadastro'] === '002' || currentSession.funcoes['cadastro'] === '999');
     },
-    // Módulos de Materiais
     canManageMaterials: function() {
         return this.hasModuleAccess('materiais') && ['003', '999'].includes(currentSession.funcoes['materiais']);
     },
@@ -187,6 +185,105 @@ App.Core.UI.Modal = {
         overlay.classList.remove('flex');
         document.getElementById('app-modal-actions').innerHTML = '';
     }
+};
+
+// Função Reutilizável para alternar visibilidade de campos de senha
+App.Core.UI.toggleFieldVisibility = function(inputId, iconShowId, iconHideId) {
+    var input = document.getElementById(inputId);
+    var iconShow = document.getElementById(iconShowId);
+    var iconHide = document.getElementById(iconHideId);
+    if (!input) return;
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (iconShow) iconShow.classList.add('hidden');
+        if (iconHide) iconHide.classList.remove('hidden');
+    } else {
+        input.type = 'password';
+        if (iconShow) iconShow.classList.remove('hidden');
+        if (iconHide) iconHide.classList.add('hidden');
+    }
+};
+
+// Modal de Troca de Senha Obrigatória
+App.Core.UI.openChangePasswordModal = function(session) {
+    App.Core.UI.Modal.open({
+        title: "Atualização de Senha",
+        subtitle: "Por favor, defina uma nova senha de 6 dígitos para continuar.",
+        body: `
+            <div class="space-y-3">
+                <div class="relative w-full">
+                    <input type="password" id="new-pass-1" maxlength="6" class="w-full px-4 py-2.5 pr-12 rounded-xl border border-slate-300 text-center font-bold tracking-widest" placeholder="Nova Senha (6 dígitos)">
+                    <button type="button" onclick="App.Core.UI.toggleFieldVisibility('new-pass-1', 'eye-show-1', 'eye-hide-1')" class="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-slate-600">
+                        <svg id="eye-show-1" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <svg id="eye-hide-1" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+                    </button>
+                </div>
+                <div class="relative w-full">
+                    <input type="password" id="new-pass-2" maxlength="6" class="w-full px-4 py-2.5 pr-12 rounded-xl border border-slate-300 text-center font-bold tracking-widest" placeholder="Confirmar Nova Senha">
+                    <button type="button" onclick="App.Core.UI.toggleFieldVisibility('new-pass-2', 'eye-show-2', 'eye-hide-2')" class="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-slate-600">
+                        <svg id="eye-show-2" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <svg id="eye-hide-2" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+                    </button>
+                </div>
+            </div>
+        `,
+        actions: [
+            {
+                text: "Salvar Nova Senha",
+                onClick: function() {
+                    var p1 = document.getElementById('new-pass-1').value;
+                    var p2 = document.getElementById('new-pass-2').value;
+                    
+                    // Função auxiliar para limpar campos após erro
+                    var clearPassFields = function() {
+                        document.getElementById('new-pass-1').value = '';
+                        document.getElementById('new-pass-2').value = '';
+                        document.getElementById('new-pass-1').focus();
+                    };
+                    
+                    if (!p1 || p1.length !== 6 || !/^\d+$/.test(p1)) {
+                        alert("A senha deve ter exatamente 6 dígitos numéricos.");
+                        clearPassFields();
+                        return;
+                    }
+                    if (p1 !== p2) {
+                        alert("As senhas não conferem.");
+                        clearPassFields();
+                        return;
+                    }
+                    if (p1 === "123456") {
+                        alert("A nova senha não pode ser igual à senha padrão (123456).");
+                        clearPassFields();
+                        return;
+                    }
+                    
+                    App.UI.Loader.show();
+                    var payload = { action: 'changePassword', userId: session.id, newSenha: p1 };
+                    App.Core.API.postEvent(payload, function(res) {
+                        App.UI.Loader.hide();
+                        if (res.status === 'success') {
+                            App.UI.SuccessToast.show(1500);
+                            App.Core.UI.Modal.close();
+                            session.mustChangePassword = false;
+                            App.Core.Controller.setupSession(session);
+                        } else {
+                            alert("Erro ao atualizar senha: " + res.message);
+                            clearPassFields();
+                        }
+                    });
+                },
+                className: "w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all mb-2"
+            },
+            {
+                text: "Cancelar (Sair)",
+                onClick: function() {
+                    App.Core.UI.Modal.close();
+                    location.reload();
+                },
+                className: "w-full bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all"
+            }
+        ]
+    });
 };
 
 // ==========================================
@@ -414,6 +511,13 @@ App.Core.Controller.performLogin = async function() {
                 else reject(data.message || 'Erro ao logar.');
             });
         });
+        
+        // VERIFICAÇÃO DE TROCA DE SENHA OBRIGATÓRIA
+        if (res.session.mustChangePassword) {
+            App.Core.UI.openChangePasswordModal(res.session);
+            return; // Bloqueia a entrada no app
+        }
+        
         App.Core.Controller.setupSession(res.session);
     } catch (err) {
         errorEl.innerText = err;
@@ -503,11 +607,7 @@ App.Core.Controller.initApp = async function() {
 };
 
 App.Core.UI.togglePasswordVisibility = function() {
-    var input = document.getElementById('password-input');
-    var iconShow = document.getElementById('eye-icon-show');
-    var iconHide = document.getElementById('eye-icon-hide');
-    if (input.type === 'password') { input.type = 'text'; iconShow.classList.add('hidden'); iconHide.classList.remove('hidden'); }
-    else { input.type = 'password'; iconShow.classList.remove('hidden'); iconHide.classList.add('hidden'); }
+    App.Core.UI.toggleFieldVisibility('password-input', 'eye-icon-show', 'eye-icon-hide');
 };
 
 window.performLogin = App.Core.Controller.performLogin;
