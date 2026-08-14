@@ -34,6 +34,14 @@ function doPost(e) {
     else if (action === 'getDictionaries') response = getDictionaries(); 
     else if (action === 'saveUserAccess') response = saveUserAccess(data); 
     else if (action === 'registrarLog') response = registrarLogAtuacao(data);
+    else if (action === 'createTask') response = createTask(data);
+    else if (action === 'completeTask') response = completeTask(data);
+    // MÓDULO DE MATERIAIS
+    else if (action === 'registerMaterialTransaction') response = registerMaterialTransaction(data);
+    else if (action === 'distributeMaterial') response = distributeMaterial(data);
+    else if (action === 'confirmMaterialReceipt') response = confirmMaterialReceipt(data);
+    // SEGURANÇA
+    else if (action === 'changePassword') response = changePassword(data);
 
     return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
@@ -44,7 +52,7 @@ function doPost(e) {
 }
 
 // ==========================================
-// AUTENTICAÇÃO E RBAC
+// AUTENTICAÇÃO E RBAC DINÂMICO
 // ==========================================
 function generateHash(senha) {
   if (!senha) return "";
@@ -57,29 +65,67 @@ function generateHash(senha) {
   return txtHash;
 }
 
-function parseCodigoAcesso(codigo) {
-  if (!codigo || codigo.length < 12) return { mapa: '000', agenda: '000', cadastro: '000', admin: '000' };
-  return {
-    mapa: codigo.substring(0, 3),
-    agenda: codigo.substring(3, 6),
-    cadastro: codigo.substring(6, 9),
-    admin: codigo.substring(9, 12)
-  };
+// Parser Dinâmico: Monta o objeto baseado na quantidade de módulos, FORÇANDO MINÚSCULAS
+function parseCodigoAcesso(codigo, modulos) {
+  var parsed = {};
+  if (!codigo || !modulos) return parsed;
+  codigo = codigo.toString().replace(/'/g, "").trim();
+  
+  modulos.forEach(function(mod, index) {
+    var start = index * 3;
+    // Força a chave para minúsculas para compatibilidade com os módulos antigos
+    var key = mod.nome.toString().toLowerCase();
+    parsed[key] = codigo.substring(start, start + 3) || "000";
+  });
+  return parsed;
+}
+
+// Função Utilitária Reutilizável de Auto-Correção de Schema (On-the-fly)
+function normalizeAccessCode(userId, currentCode, expectedLength) {
+  if (!currentCode) currentCode = "";
+  currentCode = currentCode.toString().replace(/'/g, "").trim();
+  
+  if (currentCode.length < expectedLength) {
+    var padding = "";
+    for (var i = 0; i < (expectedLength - currentCode.length); i++) {
+      padding += "0";
+    }
+    var newCode = currentCode + padding;
+    
+    // Tenta salvar na base de contatos se for um usuário com ID real (não LEGADO)
+    if (userId && userId !== 'LEGADO') {
+      try {
+        var ss = SpreadsheetApp.openById(CONTATOS_SHEET_ID);
+        var sheet = ss.getSheetByName(CONTATOS_SHEET_NAME);
+        var rows = sheet.getDataRange().getValues();
+        for (var i = 1; i < rows.length; i++) {
+          if (rows[i][25] && rows[i][25].toString().replace(/'/g, "").trim().toUpperCase() == userId.toString().toUpperCase()) {
+            sheet.getRange(i + 1, 28).setValue(txt(newCode)); // Coluna AB
+            break;
+          }
+        }
+      } catch(e) {
+        // Ignora erro de salvamento para não bloquear o login
+      }
+    }
+    return newCode;
+  }
+  return currentCode;
 }
 
 function gerarLegadoDeFuncoes(funcoes) {
   var nivelLegado = [];
-  if (funcoes.mapa === '999') nivelLegado = ['TOTAL'];
-  else if (funcoes.mapa === '003') nivelLegado = ['CARD'];
-  else if (funcoes.mapa === '002') nivelLegado = ['ZAP'];
-  else if (funcoes.mapa === '001') nivelLegado = ['NOME'];
+  if (funcoes['mapa'] === '999') nivelLegado = ['TOTAL'];
+  else if (funcoes['mapa'] === '003') nivelLegado = ['CARD'];
+  else if (funcoes['mapa'] === '002') nivelLegado = ['ZAP'];
+  else if (funcoes['mapa'] === '001') nivelLegado = ['NOME'];
 
   var modulosLegado = [];
-  if (funcoes.mapa !== '000') modulosLegado.push(1);
-  if (funcoes.agenda !== '000') modulosLegado.push(2);
-  if (funcoes.cadastro !== '000') modulosLegado.push(3);
-  if (funcoes.admin !== '000') modulosLegado.push(4);
-  if (funcoes.agenda === '003' && !modulosLegado.includes(3)) modulosLegado.push(3);
+  if (funcoes['mapa'] && funcoes['mapa'] !== '000') modulosLegado.push(1);
+  if (funcoes['agenda'] && funcoes['agenda'] !== '000') modulosLegado.push(2);
+  if (funcoes['cadastro'] && funcoes['cadastro'] !== '000') modulosLegado.push(3);
+  if (funcoes['admin'] && funcoes['admin'] !== '000') modulosLegado.push(4);
+  if (funcoes['agenda'] === '003' && !modulosLegado.includes(3)) modulosLegado.push(3);
   return { nivel: nivelLegado, modulos: modulosLegado };
 }
 
@@ -90,35 +136,16 @@ function performLogin(data) {
   
   var dataRows = sheet.getDataRange().getValues();
   var dicts = getDictionaries();
+  var expectedLen = dicts.modulos.length * 3;
   
   for (var i = 1; i < dataRows.length; i++) {
     if (dataRows[i][0] && dataRows[i][0].toString().trim() === key) {
       var eqCodigos = dataRows[i][1] ? dataRows[i][1].toString().trim() : "";
-      var niCodigos = dataRows[i][2] ? dataRows[i][2].toString().trim().toUpperCase() : "";
-      var moCodigos = dataRows[i][3] ? dataRows[i][3].toString().trim() : "1";
-      var codigoAcessoStr = dataRows[i][4] ? dataRows[i][4].toString().trim() : "";
+      var codigoAcessoStr = dataRows[i][4] ? dataRows[i][4].toString().trim() : ""; // Lê o Codigo_Novo
       
-      var parsedFuncoes;
-      if (codigoAcessoStr.length === 12) {
-        parsedFuncoes = parseCodigoAcesso(codigoAcessoStr);
-      } else {
-        var mapLvl = '000';
-        if (niCodigos.includes('TOTAL') || niCodigos.includes('000')) mapLvl = '999';
-        else if (niCodigos.includes('CARD') || niCodigos.includes('003')) mapLvl = '003';
-        else if (niCodigos.includes('ZAP') || niCodigos.includes('002')) mapLvl = '002';
-        else if (niCodigos.includes('NOME') || niCodigos.includes('001')) mapLvl = '001';
-        
-        var agendaLvl = '000';
-        if (moCodigos.includes('2') || moCodigos.includes('3')) agendaLvl = '003';
-        
-        var cadastroLvl = '000';
-        if (mapLvl === '999' || mapLvl === '003') cadastroLvl = '002';
-        
-        var adminLvl = '000';
-        if (mapLvl === '999') adminLvl = '999';
-        
-        parsedFuncoes = { mapa: mapLvl, agenda: agendaLvl, cadastro: cadastroLvl, admin: adminLvl };
-      }
+      // AUTO-CORREÇÃO DE SCHEMA (On-the-fly)
+      var normalizedCode = normalizeAccessCode(key, codigoAcessoStr, expectedLen);
+      var parsedFuncoes = parseCodigoAcesso(normalizedCode, dicts.modulos);
       
       var teamsArray = [];
       if(eqCodigos) {
@@ -137,7 +164,8 @@ function performLogin(data) {
         session: {
           key: key, id: 'LEGADO', nome: 'Usuário ' + key, teams: teamsArray, 
           nivel: legado.nivel, modulos: legado.modulos, 
-          funcoes: parsedFuncoes 
+          funcoes: parsedFuncoes,
+          mustChangePassword: false // Logins por chave não usam senha
         }
       };
     }
@@ -151,28 +179,36 @@ function loginUser(data) {
   var rows = sheet.getDataRange().getValues();
   var phoneTried = formatPhoneBackend(data.phone);
   var hashTried = generateHash(data.password);
+  var dicts = getDictionaries();
+  var expectedLen = dicts.modulos.length * 3;
   
   for (var i = 1; i < rows.length; i++) {
     var rowPhone = formatPhoneBackend(rows[i][2]);
     if (rowPhone === phoneTried) {
       var storedHash = rows[i][26] ? rows[i][26].toString().trim() : ""; 
-      var codigoAcesso = rows[i][27] ? rows[i][27].toString().trim() : ""; 
+      var rawCodigoAcesso = rows[i][27] ? rows[i][27].toString().trim() : ""; 
       var idContato = rows[i][25] ? rows[i][25].toString().trim().toUpperCase() : ""; 
       var equipeNomesStr = rows[i][5] ? rows[i][5].toString().trim() : "";
       
       if (storedHash === "") return { status: 'error', message: 'Usuário sem acesso ao sistema.' };
       if (storedHash === hashTried) {
-        var parsedFuncoes = parseCodigoAcesso(codigoAcesso);
-        var legado = gerarLegadoDeFuncoes(parsedFuncoes);
+        // AUTO-CORREÇÃO DE SCHEMA
+        var normalizedCode = normalizeAccessCode(idContato, rawCodigoAcesso, expectedLen);
+        var parsedFuncoes = parseCodigoAcesso(normalizedCode, dicts.modulos);
         
+        var legado = gerarLegadoDeFuncoes(parsedFuncoes);
         var teamsArray = equipeNomesStr ? equipeNomesStr.split(',').map(function(t) { return t.trim().toUpperCase(); }).filter(function(t) { return t.length > 0; }) : ["TODAS"];
+        
+        // VERIFICAÇÃO DE SENHA PADRÃO (123456)
+        var isDefaultPass = (hashTried === generateHash("123456"));
         
         return { 
           status: 'success', 
           session: {
             id: idContato, key: 'logado', nome: rows[i][1], teams: teamsArray, 
             nivel: legado.nivel, modulos: legado.modulos, 
-            funcoes: parsedFuncoes 
+            funcoes: parsedFuncoes,
+            mustChangePassword: isDefaultPass // Flag para forçar troca de senha
           }
         };
       } else {
@@ -183,9 +219,39 @@ function loginUser(data) {
   return { status: 'error', message: 'Telefone não encontrado na base.' };
 }
 
+// NOVA FUNÇÃO: Alteração de Senha
+function changePassword(data) {
+  if (!data.userId || !data.newSenha || data.newSenha.length !== 6) {
+    return { status: 'error', message: 'Dados inválidos para troca de senha.' };
+  }
+  
+  // VALIDAÇÃO DE SEGURANÇA: Impede o uso da senha padrão na troca
+  if (data.newSenha === "123456") {
+    return { status: 'error', message: 'A nova senha não pode ser igual à senha padrão (123456).' };
+  }
+  
+  var ss = SpreadsheetApp.openById(CONTATOS_SHEET_ID);
+  var sheet = ss.getSheetByName(CONTATOS_SHEET_NAME);
+  if (!sheet) return { status: 'error', message: 'Aba não encontrada.' };
+  
+  var dataRows = sheet.getDataRange().getValues();
+  var targetId = data.userId.toString().trim().toUpperCase();
+  
+  for (var i = 1; i < dataRows.length; i++) {
+    var rowId = dataRows[i][25] ? dataRows[i][25].toString().replace(/'/g, "").trim().toUpperCase() : "";
+    if (rowId === targetId) {
+      var newHash = generateHash(data.newSenha);
+      sheet.getRange(i + 1, 27).setValue(txt(newHash)); // Coluna AA (Senha_Hash)
+      registrarLogAtuacao({ userId: data.userId, acao: 'CHANGE_PASS', refId: '', lat: '', lng: '', status: 'OK' });
+      return { status: 'success', message: 'Senha atualizada com sucesso!' };
+    }
+  }
+  return { status: 'error', message: 'Usuário não encontrado para atualizar a senha.' };
+}
+
 function getDictionaries() {
   var cache = CacheService.getScriptCache();
-  var cached = cache.get('dicts_acessos_v7');
+  var cached = cache.get('dicts_acessos_v9');
   if (cached) return JSON.parse(cached);
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -227,7 +293,7 @@ function getDictionaries() {
     funcoes_modulos: extractFuncoesModulos(ss.getSheetByName('Funcoes_Modulos')),
     funcoes_contato: extract(ss.getSheetByName('Funcoes'))
   };
-  cache.put('dicts_acessos_v7', JSON.stringify(result), 21600);
+  cache.put('dicts_acessos_v9', JSON.stringify(result), 21600);
   return result;
 }
 
@@ -254,9 +320,10 @@ function saveUserAccess(data) {
   for (var i = 1; i < rows.length; i++) {
     var rowId = rows[i][25] ? rows[i][25].toString().trim().toUpperCase() : "";
     if (rowId === targetId) { 
-      sheet.getRange(i + 1, 28).setValue(txt(newCodigo)); // Força Texto
+      sheet.getRange(i + 1, 28).setValue(txt(newCodigo)); 
       sheet.getRange(i + 1, 6).setValue(equipesNomesStr);
-      if (data.senha && data.senha.toString().trim() !== "") sheet.getRange(i + 1, 27).setValue(txt(generateHash(data.senha))); // Força Texto
+      // Permite 123456 aqui para o Admin
+      if (data.senha && data.senha.toString().trim() !== "") sheet.getRange(i + 1, 27).setValue(txt(generateHash(data.senha))); 
       return { status: 'success', message: 'Acesso atualizado com sucesso!' };
     }
   }
@@ -276,7 +343,7 @@ function registrarLogAtuacao(payload) {
 }
 
 // ==========================================
-// EVENTOS (ETAPA 2: MODELO JSON 1 LINHA)
+// EVENTOS 
 // ==========================================
 function createEvent(data) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Eventos");
@@ -295,16 +362,8 @@ function createEvent(data) {
 
   var ev = data.eventData;
   sheet.appendRow([
-    txt(newId),                      // A: ID
-    ev.nome || "",                   // B: Nome
-    ev.data || "",                   // C: Data
-    ev.tipo || "",                   // D: Tipo
-    ev.bairro || "",                 // E: Bairro
-    data.hierarquia || "[]",         // F: JSON
-    "",                              // G: Lista_Presenca
-    ev.descricao || "",              // H: Desc
-    "Pendente",                      // I: Status
-    ""                               // J: QR_Token
+    txt(newId), ev.nome || "", ev.data || "", ev.tipo || "", ev.bairro || "", 
+    data.hierarquia || "[]", "", ev.descricao || "", "Pendente", ""
   ]);
 
   return { status: 'success', message: 'Evento criado com sucesso!', newId: newId };
@@ -322,31 +381,16 @@ function updateEvent(data) {
   var newRows = [];
   
   for (var i = 0; i < dataRows.length; i++) {
-    if (i === 0) { 
-      newRows.push(dataRows[i]);
-      continue;
-    }
-    if (dataRows[i][0].toString() == eventId.toString()) {
-      updated = true; 
-      continue;
-    }
+    if (i === 0) { newRows.push(dataRows[i]); continue; }
+    if (dataRows[i][0].toString() == eventId.toString()) { updated = true; continue; }
     newRows.push(dataRows[i]); 
   }
   
   if (updated) {
     newRows.push([
-      txt(eventId), 
-      ev.nome || "", 
-      ev.data || "", 
-      ev.tipo || "", 
-      ev.bairro || "",            
-      hierarquiaJson, 
-      "",                         
-      ev.descricao || "", 
-      "Pendente",                 
-      ""                          
+      txt(eventId), ev.nome || "", ev.data || "", ev.tipo || "", ev.bairro || "",            
+      hierarquiaJson, "", ev.descricao || "", "Pendente", ""                         
     ]);
-    
     sheet.clearContents();
     sheet.getRange(1, 1, newRows.length, newRows[0].length).setValues(newRows);
     return { status: 'success', message: 'Evento atualizado!' };
@@ -354,23 +398,145 @@ function updateEvent(data) {
   return { status: 'error', message: 'Evento não encontrado.' };
 }
 
-// ETAPA 2: Presença agora loga na aba 'Presencas'
 function updatePresence(data) {
   var presencaSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Presencas");
   if (!presencaSheet) return { status: 'error', message: 'Aba Presencas não encontrada.' };
 
   presencaSheet.appendRow([
-    new Date(),                       // A: Timestamp
-    txt(data.eventId || ""),          // B: ID_Evento
-    txt(data.mobId || ""),            // C: ID_Organizador
-    txt(data.presence || ""),         // D: ID_Participante
-    data.lat || "",                   // E: Latitude
-    data.lng || ""                    // F: Longitude
+    new Date(), txt(data.eventId || ""), txt(data.mobId || ""), txt(data.presence || ""), data.lat || "", data.lng || ""
   ]);
 
   registrarLogAtuacao({ userId: data.mobId || 'unknown', acao: 'CHECKIN_PRESENCA', refId: data.eventId + '_' + data.presence, lat: data.lat || '', lng: data.lng || '', status: 'OK' });
-  
   return { status: 'success', message: 'Presença registrada no log!' };
+}
+
+// ==========================================
+// TAREFAS AVULSAS 
+// ==========================================
+function createTask(data) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Tarefas");
+  if (!sheet) return { status: 'error', message: 'Aba Tarefas não encontrada.' };
+
+  var lastRow = sheet.getLastRow();
+  var maxIdNum = 0;
+  if (lastRow > 1) {
+    var idCol = sheet.getRange(2, 2, lastRow - 1, 1).getValues(); 
+    idCol.forEach(function(row) {
+      if (row[0] && row[0].toString().startsWith("TASK-")) {
+        var num = parseInt(row[0].toString().replace("TASK-", ""), 10);
+        if (!isNaN(num) && num > maxIdNum) maxIdNum = num;
+      }
+    });
+  }
+  var newId = "TASK-" + (maxIdNum + 1).toString().padStart(4, '0');
+
+  sheet.appendRow([
+    new Date(), txt(newId), txt(data.userId || ""), data.titulo || "Tarefa Sem Título", 
+    data.descricao || "", data.dataLimite || "", "Pendente", "", txt(data.createdBy || "")
+  ]);
+
+  registrarLogAtuacao({ userId: data.createdBy || 'unknown', acao: 'CREATE_TASK', refId: newId, lat: '', lng: '', status: 'OK' });
+  return { status: 'success', message: 'Tarefa criada com sucesso!', newId: newId };
+}
+
+function completeTask(data) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Tarefas");
+  if (!sheet) return { status: 'error', message: 'Aba Tarefas não encontrada.' };
+  var dataRows = sheet.getDataRange().getValues();
+  var taskId = data.taskId;
+  var updated = false;
+  
+  for (var i = 1; i < dataRows.length; i++) {
+    if (dataRows[i][1].toString().replace(/'/g, "") == taskId.toString()) { 
+      sheet.getRange(i + 1, 7).setValue("Concluído"); 
+      sheet.getRange(i + 1, 8).setValue(data.relato || ""); 
+      updated = true; break;
+    }
+  }
+  if (updated) {
+    registrarLogAtuacao({ userId: data.userId || 'unknown', acao: 'COMPLETE_TASK', refId: taskId, lat: data.lat || '', lng: data.lng || '', status: 'OK' });
+    return { status: 'success', message: 'Tarefa concluída!' };
+  }
+  return { status: 'error', message: 'Tarefa não encontrada.' };
+}
+
+// ==========================================
+// CONTROLE DE MATERIAIS 
+// ==========================================
+function registerMaterialTransaction(data) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Materiais_Movimentacao");
+  if (!sheet) return { status: 'error', message: 'Aba Materiais_Movimentacao não encontrada.' };
+
+  var lastRow = sheet.getLastRow();
+  var maxIdNum = 0;
+  if (lastRow > 1) {
+    var idCol = sheet.getRange(2, 2, lastRow - 1, 1).getValues(); 
+    idCol.forEach(function(row) {
+      if (row[0] && row[0].toString().startsWith("MAT-")) {
+        var num = parseInt(row[0].toString().replace("MAT-", ""), 10);
+        if (!isNaN(num) && num > maxIdNum) maxIdNum = num;
+      }
+    });
+  }
+  var newId = "MAT-" + (maxIdNum + 1).toString().padStart(4, '0');
+
+  sheet.appendRow([
+    new Date(), txt(newId), txt(data.tipoMov || "ENTRADA"), txt(data.item || ""), parseInt(data.quantidade || 0), 
+    txt(data.idOrigemDestino || ""), txt(data.idResponsavel || ""), txt(data.refId || ""), txt(data.status || "Concluído")
+  ]);
+
+  registrarLogAtuacao({ userId: data.idResponsavel || 'unknown', acao: 'MAT_' + (data.tipoMov || 'ENTRY'), refId: newId, lat: '', lng: '', status: 'OK' });
+  return { status: 'success', message: 'Movimentação registrada com sucesso!', newId: newId };
+}
+
+function distributeMaterial(data) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Materiais_Movimentacao");
+  if (!sheet) return { status: 'error', message: 'Aba Materiais_Movimentacao não encontrada.' };
+
+  var lastRow = sheet.getLastRow();
+  var maxIdNum = 0;
+  if (lastRow > 1) {
+    var idCol = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
+    idCol.forEach(function(row) {
+      if (row[0] && row[0].toString().startsWith("MAT-")) {
+        var num = parseInt(row[0].toString().replace("MAT-", ""), 10);
+        if (!isNaN(num) && num > maxIdNum) maxIdNum = num;
+      }
+    });
+  }
+  var newId = "MAT-" + (maxIdNum + 1).toString().padStart(4, '0');
+
+  sheet.appendRow([
+    new Date(), txt(newId), "DISTRIBUICAO", txt(data.item || ""), parseInt(data.quantidade || 0), 
+    txt(data.idReceptor || ""), txt(data.idResponsavel || ""), txt(data.refId || ""), "Pendente_Recebimento"
+  ]);
+
+  registrarLogAtuacao({ userId: data.idResponsavel || 'unknown', acao: 'MAT_DISTRIB', refId: newId, lat: '', lng: '', status: 'OK' });
+  return { status: 'success', message: 'Material distribuído (Aguardando Recebimento)!', newId: newId };
+}
+
+function confirmMaterialReceipt(data) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Materiais_Movimentacao");
+  if (!sheet) return { status: 'error', message: 'Aba Materiais_Movimentacao não encontrada.' };
+  var dataRows = sheet.getDataRange().getValues();
+  var transId = data.transId;
+  var updated = false;
+  
+  for (var i = 1; i < dataRows.length; i++) {
+    if (dataRows[i][1].toString().replace(/'/g, "") == transId.toString()) { 
+      var rowReceptorId = dataRows[i][5].toString().replace(/'/g, "").trim().toUpperCase();
+      var loggedUserId = data.userId.toString().trim().toUpperCase();
+      if (rowReceptorId === loggedUserId) {
+          sheet.getRange(i + 1, 9).setValue("Recebido"); 
+          updated = true; break;
+      }
+    }
+  }
+  if (updated) {
+    registrarLogAtuacao({ userId: data.userId || 'unknown', acao: 'MAT_RECEIPT', refId: transId, lat: '', lng: '', status: 'OK' });
+    return { status: 'success', message: 'Recebimento confirmado!' };
+  }
+  return { status: 'error', message: 'Transação não encontrada ou não pertence a este usuário.' };
 }
 
 // ==========================================
@@ -391,7 +557,7 @@ function createContact(data) {
   var lastRow = sheet.getLastRow(), maxIdNum = 0;
   if (lastRow > 1) {
     sheet.getRange(2, 26, lastRow - 1, 1).getValues().forEach(function(row) {
-      if (row[0]) { var num = parseInt(row[0].toString().replace(/'/g, ""), 36); if (!isNaN(num) && num > maxIdNum) maxIdNum = num; } // Ignora apóstrofo ao ler
+      if (row[0]) { var num = parseInt(row[0].toString().replace(/'/g, ""), 36); if (!isNaN(num) && num > maxIdNum) maxIdNum = num; }
     });
   }
   var newId = (maxIdNum + 1).toString(36).toUpperCase().padStart(4, '0');
@@ -399,8 +565,7 @@ function createContact(data) {
     data.bairro || "", data.nome || "", formatPhoneBackend(data.telefone), data.ref || "", 
     data.funcao || "MOBILIZADOR(A)", data.equipe || "", new Date(), 
     "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
-    txt(newId), // Z: ID forçado como texto
-    "", "" 
+    txt(newId), "", "" 
   ]);
   registrarLogAtuacao({ userId: data.userId || 'unknown', acao: 'CAD_CONTATO', refId: newId, lat: data.lat || '', lng: data.lng || '', status: 'OK' });
   return { status: 'success', newId: newId };
@@ -413,7 +578,7 @@ function updateContact(data) {
   var dataRows = sheet.getDataRange().getValues();
   var updated = false;
   for (var i = 1; i < dataRows.length; i++) {
-    if (dataRows[i][25].toString().replace(/'/g, "") == data.id.toString()) { // Ignora apóstrofo ao comparar
+    if (dataRows[i][25].toString().replace(/'/g, "") == data.id.toString()) { 
       sheet.getRange(i + 1, 1).setValue(data.bairro); sheet.getRange(i + 1, 2).setValue(data.nome);   
       sheet.getRange(i + 1, 3).setValue(formatPhoneBackend(data.telefone)); sheet.getRange(i + 1, 4).setValue(data.ref);       
       sheet.getRange(i + 1, 5).setValue(data.funcao); sheet.getRange(i + 1, 6).setValue(data.equipe);    
@@ -428,18 +593,27 @@ function lookupContactByPhone(data) {
   if (!sheet) return { status: 'error', message: 'Aba Base_Contatos não encontrada.' };
   var dataRows = sheet.getDataRange().getValues();
   var formattedInput = formatPhoneBackend(data.phone);
+  var dicts = getDictionaries();
+  var expectedLen = dicts.modulos.length * 3;
+  
   for (var i = 1; i < dataRows.length; i++) {
     if (formatPhoneBackend(dataRows[i][2]) === formattedInput) {
+      var rawId = dataRows[i][25] ? dataRows[i][25].toString().replace(/'/g, "").trim().toUpperCase() : "";
+      var rawCodigo = dataRows[i][27] ? dataRows[i][27].toString().replace(/'/g, "").trim() : "";
+      
+      // AUTO-CORREÇÃO
+      var normCodigo = normalizeAccessCode(rawId, rawCodigo, expectedLen);
+      
       return { 
         status: 'success', 
         contact: {
-          id: dataRows[i][25] ? dataRows[i][25].toString().replace(/'/g, "").trim().toUpperCase() : "", // Limpa apóstrofo
+          id: rawId, 
           nome: dataRows[i][1] ? dataRows[i][1].toString().trim() : "", 
           bairro: dataRows[i][0] ? dataRows[i][0].toString().trim() : "", 
           ref: dataRows[i][3] ? dataRows[i][3].toString().trim() : "", 
           equipe: dataRows[i][5] ? dataRows[i][5].toString().trim() : "",
           funcao: dataRows[i][4] ? dataRows[i][4].toString().trim() : "",
-          codigoAcesso: dataRows[i][27] ? dataRows[i][27].toString().replace(/'/g, "").trim() : "", // Limpa apóstrofo
+          codigoAcesso: normCodigo, 
           hasSenha: dataRows[i][26] ? dataRows[i][26].toString().trim() !== "" : false
         }
       };
@@ -449,7 +623,7 @@ function lookupContactByPhone(data) {
 }
 
 // ==========================================
-// QR CODE E KIOSK (AJUSTADO PARA JSON)
+// QR CODE E KIOSK 
 // ==========================================
 function generateQRToken(data) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Eventos");
@@ -459,8 +633,7 @@ function generateQRToken(data) {
   var updated = false;
   for (var i = 1; i < dataRows.length; i++) { 
     if (dataRows[i][0].toString() == data.eventId.toString()) { 
-      sheet.getRange(i + 1, 10).setValue(token); 
-      updated = true; 
+      sheet.getRange(i + 1, 10).setValue(token); updated = true; 
     } 
   }
   return updated ? { status: 'success', token: token } : { status: 'error', message: 'Evento não encontrado.' };
@@ -473,8 +646,7 @@ function deactivateQRToken(data) {
   var updated = false;
   for (var i = 1; i < dataRows.length; i++) { 
     if (dataRows[i][0].toString() == data.eventId.toString()) { 
-      sheet.getRange(i + 1, 10).setValue(''); 
-      updated = true; 
+      sheet.getRange(i + 1, 10).setValue(''); updated = true; 
     } 
   }
   return updated ? { status: 'success', message: 'QR Code desativado.' } : { status: 'error', message: 'Evento não encontrado.' };
@@ -487,24 +659,18 @@ function validateKioskAccess(data) {
   var eventName = "", eventDate = "", tokenValid = false;
   for (var i = 1; i < dataRows.length; i++) {
     if (dataRows[i][0].toString() == data.eventId.toString()) {
-      eventName = dataRows[i][1]; 
-      eventDate = dataRows[i][2];
-      if (dataRows[i][9] === data.token) { 
-        tokenValid = true;
-      }
+      eventName = dataRows[i][1]; eventDate = dataRows[i][2];
+      if (dataRows[i][9] === data.token) { tokenValid = true; }
     }
   }
   return tokenValid ? { status: 'success', eventName: eventName, eventDate: eventDate } : { status: 'error', message: 'QR Code inválido ou desativado.' };
 }
 
-// Helper para extrair IDs do JSON hierárquico
 function extractIdsFromJson(node) {
   var ids = [];
   if (node.id) ids.push(node.id.toString().trim().toUpperCase());
   if (node.filhos && Array.isArray(node.filhos)) {
-    node.filhos.forEach(function(child) {
-      ids = ids.concat(extractIdsFromJson(child));
-    });
+    node.filhos.forEach(function(child) { ids = ids.concat(extractIdsFromJson(child)); });
   }
   return ids;
 }
@@ -513,34 +679,20 @@ function authorizeKioskMobilizer(data) {
   var eventSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Eventos");
   if (!eventSheet) return { status: 'error', message: 'Aba Eventos não encontrada.' };
   var eventDataRows = eventSheet.getDataRange().getValues();
-  var eventId = data.eventId;
-  var token = data.token;
-  var authorizedMobId = null;
-  var tokenValid = false;
-  var estruturaJson = "[]";
+  var eventId = data.eventId, token = data.token, authorizedMobId = null, tokenValid = false, estruturaJson = "[]";
   
   for (var i = 1; i < eventDataRows.length; i++) {
     if (eventDataRows[i][0].toString() == eventId.toString() && eventDataRows[i][9] === token) { 
-      tokenValid = true;
-      estruturaJson = eventDataRows[i][5] ? eventDataRows[i][5].toString() : "[]"; 
-      break;
+      tokenValid = true; estruturaJson = eventDataRows[i][5] ? eventDataRows[i][5].toString() : "[]"; break;
     }
   }
-  
   if (!tokenValid) return { status: 'error', message: 'Token inválido.' };
   
   var arvore;
-  try {
-    arvore = JSON.parse(estruturaJson);
-  } catch (e) {
-    return { status: 'error', message: 'Estrutura hierárquica do evento corrompida.' };
-  }
+  try { arvore = JSON.parse(estruturaJson); } catch (e) { return { status: 'error', message: 'Estrutura hierárquica do evento corrompida.' }; }
   
   var allHierIds = [];
-  arvore.forEach(function(node) {
-    allHierIds = allHierIds.concat(extractIdsFromJson(node));
-  });
-  
+  arvore.forEach(function(node) { allHierIds = allHierIds.concat(extractIdsFromJson(node)); });
   if (allHierIds.length === 0) return { status: 'error', message: 'Evento sem organizadores definidos.' };
   
   var contatosSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Base_Contatos');
@@ -549,14 +701,10 @@ function authorizeKioskMobilizer(data) {
   var formattedInput = formatPhoneBackend(data.phone);
   
   for (var j = 1; j < contactRows.length; j++) {
-    var rowId = contactRows[j][25] ? contactRows[j][25].toString().replace(/'/g, "").trim().toUpperCase() : ""; // Limpa apóstrofo
+    var rowId = contactRows[j][25] ? contactRows[j][25].toString().replace(/'/g, "").trim().toUpperCase() : ""; 
     if (formatPhoneBackend(contactRows[j][2]) === formattedInput && rowId) {
-      if (allHierIds.indexOf(rowId) !== -1) { 
-        authorizedMobId = rowId; 
-        break; 
-      }
+      if (allHierIds.indexOf(rowId) !== -1) { authorizedMobId = rowId; break; }
     }
   }
-  
   return authorizedMobId ? { status: 'success', mobId: authorizedMobId } : { status: 'error', message: 'Telefone não autorizado para este evento.' };
 }
