@@ -98,11 +98,76 @@ App.Admin.CRUD = {
                 this.renderAccessForm(res.contact);
             } else {
                 this.state.foundContact = null;
-                resultArea.innerHTML = `<div class="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-600 font-medium text-sm">Nenhum contato encontrado com este telefone. Cadastre-o primeiro no mapa ou eventos.</div>`;
+                // Exibe botão para cadastrar o novo contato usando o modal reutilizável
+                resultArea.innerHTML = `
+                    <div class="bg-sky-50 border border-sky-200 p-6 rounded-2xl text-center">
+                        <p class="text-sm text-sky-700 font-medium mb-4">Nenhum contato encontrado com este telefone.</p>
+                        <button onclick="App.Admin.CRUD.openCreateContactModal('${formattedPhone}')" class="px-6 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">
+                            Cadastrar Novo Contato
+                        </button>
+                    </div>
+                `;
             }
         } catch (err) {
             App.UI.Loader.hide();
             resultArea.innerHTML = `<div class="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-600 font-medium text-sm">Erro: ${err}</div>`;
+        }
+    },
+
+    // ==========================================
+    // NOVO: Modal de Cadastro Rápido (Reusando App.UI.ContactForm)
+    // ==========================================
+    openCreateContactModal: function(phone) {
+        App.Core.UI.Modal.open({
+            title: "Cadastrar Novo Contato",
+            subtitle: "Preencha os dados para cadastrar e configurar o acesso",
+            body: '<div id="admin-create-contact-container"></div>'
+        });
+
+        let funcoesArray = [];
+        if (window.dictsGlobal && window.dictsGlobal.funcoes_contato) {
+            funcoesArray = window.dictsGlobal.funcoes_contato.map(f => f.nome);
+        }
+
+        App.UI.ContactForm.init('#admin-create-contact-container', {
+            funcoes: funcoesArray,
+            canEdit: true,
+            saveButtonText: "Cadastrar e Configurar Acesso",
+            onCancel: function() {
+                App.Core.UI.Modal.close();
+            },
+            onSaveSuccess: (contactData) => {
+                // Fecha o modal de cadastro
+                App.Core.UI.Modal.close();
+                
+                // Prepara o objeto do novo contato com permissões zeradas para a tela de acesso
+                let defaultCodigo = "";
+                if (this.state.dictionaries && this.state.dictionaries.modulos) {
+                    defaultCodigo = this.state.dictionaries.modulos.map(() => '000').join('');
+                }
+                
+                const newContactMock = {
+                    id: contactData.id,
+                    nome: contactData.nome,
+                    telefone: contactData.phone, // Transporta o telefone para exibição
+                    bairro: contactData.bairro,
+                    ref: contactData.ref,
+                    equipe: contactData.equipe,
+                    funcao: contactData.funcao,
+                    codigoAcesso: defaultCodigo,
+                    hasSenha: false
+                };
+                
+                this.state.foundContact = newContactMock;
+                this.renderAccessForm(newContactMock);
+            }
+        });
+
+        // Pré-preenche o telefone e dispara a validação do formulário
+        const phoneInput = document.getElementById('form-phone');
+        if (phoneInput) {
+            phoneInput.value = phone;
+            App.UI.ContactForm.lookupPhone();
         }
     },
 
@@ -141,7 +206,6 @@ App.Admin.CRUD = {
             }).join('');
         };
 
-        // Geração dinâmica dos seletores de módulo
         const renderSelect = (moduleName, options, selectedVal) => {
             if (options.length === 0) options.push({ val: '000', text: 'Sem Acesso' });
             const optsHtml = options.map(opt => {
@@ -159,7 +223,6 @@ App.Admin.CRUD = {
             `;
         };
 
-        // Agrupa funções por módulo dinamicamente
         const modOpts = {};
         if (dicts.modulos && dicts.modulos.length > 0) {
             dicts.modulos.forEach(mod => { modOpts[mod.nome.toLowerCase()] = []; });
@@ -188,7 +251,7 @@ App.Admin.CRUD = {
                 <div class="flex justify-between items-start mb-6 pb-4 border-b border-slate-100">
                     <div>
                         <h3 class="text-xl font-bold text-slate-800">${contact.nome}</h3>
-                        <p class="text-sm text-slate-500">ID: ${contact.id} | ${contact.bairro}</p>
+                        <p class="text-sm text-slate-500">ID: ${contact.id} | Tel: ${contact.telefone || 'N/A'} | ${contact.bairro}</p>
                     </div>
                     <button onclick="App.Admin.CRUD.saveAccess()" class="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-sm">
                         Salvar Alterações
@@ -231,7 +294,6 @@ App.Admin.CRUD = {
             return;
         }
 
-        // Montagem dinâmica do código de acesso
         let codigoAcesso = "";
         if (this.state.dictionaries.modulos && this.state.dictionaries.modulos.length > 0) {
             this.state.dictionaries.modulos.forEach(mod => {
