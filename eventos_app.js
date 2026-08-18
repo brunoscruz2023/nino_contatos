@@ -364,15 +364,8 @@ function renderEventCard(ev) {
                          `</div>`;
     }
     
-    let evDate = new Date(ev.date);
-    evDate.setHours(0, 0, 0, 0);
-    let today = new Date();
-    today.setHours(0, 0, 0, 0);
-    let isPast = evDate < today;
-    let isAdmin = currentSession && currentSession.funcoes && currentSession.funcoes.admin === '999';
-
-    let canEdit = (!isPast || isAdmin) ? App.Core.Security.canCreateEvent() : false;
-    let canCheckin = (!isPast || isAdmin) ? App.Core.Security.canCheckIn() : false;
+    let canEdit = App.Core.Security.canCreateEvent();
+    let canCheckin = App.Core.Security.canCheckIn(); // Removido o bloqueio de data (isPast)
     
     let actionButtons = '';
     if (canEdit || canCheckin) {
@@ -382,20 +375,19 @@ function renderEventCard(ev) {
         }
         if (canCheckin) {
             btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.iniciarAtuacao('${ev.idEvento}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors">Iniciar Atuação</button>`;
-            
-            let firstMobId = '';
-            if (ev.participacoes && ev.participacoes.length > 0) {
-                let p = ev.participacoes.find(pa => pa.mobilizadorId && pa.mobilizadorId !== "ND");
-                if (p) firstMobId = p.mobilizadorId;
-            }
-            btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.openPresenceModal('${ev.idEvento}', '${firstMobId}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">Cadastrar Presença</button>`;
         }
         actionButtons = `<div class="flex gap-2 mt-4 border-t border-slate-100 pt-3 flex-wrap">${btnsHTML}</div>`;
+    }
+
+    let firstMobId = '';
+    if (ev.participacoes && ev.participacoes.length > 0) {
+        let p = ev.participacoes.find(pa => pa.mobilizadorId && pa.mobilizadorId !== "ND");
+        if (p) firstMobId = p.mobilizadorId;
     }
     
     return `
         <div class="accordion-card bg-white p-4 rounded-2xl border border-slate-100 shadow-sm cursor-pointer">
-            <div class="accordion-header flex items-center gap-4">
+            <div class="accordion-header flex items-center gap-4" onclick="handleEventCardClick(this.closest('.accordion-card'), '${ev.idEvento}', '${firstMobId}')">
                 <div class="w-10 h-10 rounded-xl ${uiColor.dot} bg-opacity-10 flex items-center justify-center flex-shrink-0">
                     <div class="w-3 h-3 rounded-full ${uiColor.dot}"></div>
                 </div>
@@ -428,6 +420,19 @@ function renderEventCard(ev) {
     `;
 }
 
+// NOVA FUNÇÃO: Detecta abertura/fechamento do card e altera o FAB
+window.handleEventCardClick = function(cardEl, evId, mobId) {
+    setTimeout(() => {
+        const content = cardEl.querySelector('.accordion-content');
+        const isOpen = content.style.maxHeight && content.style.maxHeight !== '0px';
+        if (isOpen) {
+            App.Layout.Shell.setEventFab(evId, mobId);
+        } else {
+            App.Layout.Shell.resetFab();
+        }
+    }, 10);
+};
+
 // NOVA FUNÇÃO: Renderiza o card de Tarefa Avulsa
 function renderTaskCard(t) {
     const isPending = t.status.toLowerCase() === 'pendente';
@@ -446,13 +451,12 @@ function renderTaskCard(t) {
         </div>`;
     }
 
-    // Busca o nome do criador
     let criadorNome = window.contatosBase && window.contatosBase[t.criadorId] ? window.contatosBase[t.criadorId].nome : null;
     let criadorHTML = criadorNome ? `<p class="text-[10px] text-slate-400 mt-1">Atribuída por: ${criadorNome}</p>` : '';
     
     return `
         <div class="accordion-card bg-white p-4 rounded-2xl border border-slate-100 shadow-sm cursor-pointer">
-            <div class="accordion-header flex items-center gap-4">
+            <div class="accordion-header flex items-center gap-4" onclick="App.UI.AccordionList.toggle(this.closest('.accordion-card'))">
                 <div class="w-10 h-10 rounded-xl ${uiColor.dot} bg-opacity-10 flex items-center justify-center flex-shrink-0">
                     <div class="w-3 h-3 rounded-full ${uiColor.dot}"></div>
                 </div>
