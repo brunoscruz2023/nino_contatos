@@ -10,7 +10,8 @@ const ICONS = {
     dashboard: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>',
     sair: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>',
     plus: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>',
-    search: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>'
+    search: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
+    checkin: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>'
 };
 
 // ==========================================
@@ -155,7 +156,7 @@ App.Layout.Shell = {
             document.getElementById('view-eventos').classList.remove('hidden');
             document.getElementById('app-title-mobile').innerHTML = "Mapa de Eventos <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
             if (typeof initEventos === 'function') initEventos();
-            this.setFab(ICONS.plus, () => { if(typeof App.Eventos.CRUD !== 'undefined') App.Eventos.CRUD.openCreateModal(); });
+            this.resetFab(); // Define o FAB padrão da tela de eventos
         } 
         else if (view === 'admin') {
             document.getElementById('view-admin').classList.remove('hidden');
@@ -173,17 +174,54 @@ App.Layout.Shell = {
             document.getElementById('view-dashboard').classList.remove('hidden');
             document.getElementById('app-title-mobile').innerHTML = "Dashboard <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
             if (typeof App.Dashboard !== 'undefined' && App.Dashboard.UI) App.Dashboard.UI.init();
-            this.setFab(ICONS.search, () => {});
+            // FAB visível, mas neutro (sem ação) no Dashboard
+            this.setFab(ICONS.search, null, false, true);
         }
 
         // Re-renderiza a barra para ocultar o botão ativo e ajustar o FAB
         this.renderNav();
     },
 
-    setFab: function(iconHtml, onClickCallback, isLogout = false) {
+    // NOVO: Define o FAB para Check-in de um evento específico
+    setEventFab: function(evId, mobId) {
+        this.fabBtn.style.display = 'flex'; // Garante que está visível
+        this.setFab(ICONS.checkin, () => {
+            if (typeof App.Eventos.CRUD !== 'undefined') {
+                App.Eventos.CRUD.openPresenceModal(evId, mobId);
+            }
+        });
+    },
+
+    // NOVO: Reseta o FAB ao padrão da view atual
+    resetFab: function() {
+        if (this.activeView === 'eventos') {
+            this.fabBtn.style.display = 'flex'; // Garante que está visível
+            if (App.Core.Security.canCreateEvent()) {
+                // Se for supervisor/admin, mostra o "+" de criar evento
+                this.setFab(ICONS.plus, () => { if(typeof App.Eventos.CRUD !== 'undefined') App.Eventos.CRUD.openCreateModal(); });
+            } else {
+                // Se for mobilizador, FAB fica visível mas neutro (aguardando abrir evento)
+                this.setFab(ICONS.plus, null, false, true);
+            }
+        }
+    },
+
+    setFab: function(iconHtml, onClickCallback, isLogout = false, isDisabled = false) {
+        this.fabBtn.style.display = 'flex'; // Garante que o FAB sempre apareça
         this.fabBtn.innerHTML = iconHtml;
-        this.fabBtn.onclick = onClickCallback;
-        if(isLogout) this.fabBtn.classList.add('logout');
-        else this.fabBtn.classList.remove('logout');
+        
+        if (isDisabled) {
+            this.fabBtn.onclick = () => {}; // Sem ação
+            this.fabBtn.classList.add('opacity-40', 'pointer-events-none');
+        } else {
+            this.fabBtn.onclick = onClickCallback;
+            this.fabBtn.classList.remove('opacity-40', 'pointer-events-none');
+        }
+        
+        if(isLogout) {
+            this.fabBtn.classList.add('logout');
+        } else {
+            this.fabBtn.classList.remove('logout');
+        }
     }
 };

@@ -198,6 +198,7 @@ App.UI.ContactForm = {
     userTeam: "",
     funcoesList: [],
     saveButtonText: "Salvar Contato",
+    lockTeam: true,
 
     init: function(containerSelector, config) {
         this.container = document.querySelector(containerSelector);
@@ -208,8 +209,9 @@ App.UI.ContactForm = {
         this.funcoesList = config.funcoes || [];
         this.saveButtonText = config.saveButtonText || "Salvar Contato";
         this.canEdit = config.canEdit !== undefined ? config.canEdit : App.Core.Security.canEditContact();
+        this.lockTeam = config.lockTeam !== undefined ? config.lockTeam : true;
 
-        if (currentSession && currentSession.teams) {
+        if (currentSession && currentSession.teams && this.lockTeam) {
             const validTeams = currentSession.teams.filter(t => t !== 'TODAS');
             if (validTeams.length === 1) {
                 this.userTeam = validTeams[0];
@@ -223,12 +225,21 @@ App.UI.ContactForm = {
 
         const funcoesOptions = this.funcoesList.map(f => `<option value="${f}">${f}</option>`).join('');
 
-        let equipesOptions = '<option value="">Selecione...</option>';
+        // Geração do HTML do Multi-Select de Equipes
+        let equipesCheckboxesHTML = '<div class="p-2 space-y-1">';
         if (window.dictsGlobal && window.dictsGlobal.equipes) {
             window.dictsGlobal.equipes.forEach(e => {
-                equipesOptions += `<option value="${e.nome}" ${this.userTeam === e.nome ? 'selected' : ''}>${e.nome}</option>`;
+                equipesCheckboxesHTML += `
+                    <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-indigo-50 cursor-pointer rounded-lg transition-colors">
+                        <input type="checkbox" value="${e.nome}" class="form-equipe-cb rounded text-indigo-600 focus:ring-indigo-500" onchange="App.UI.ContactForm.updateEquipeSelection()">
+                        <span class="text-sm text-slate-700">${e.nome}</span>
+                    </label>
+                `;
             });
+        } else {
+            equipesCheckboxesHTML = '<p class="p-3 text-xs text-slate-400">Nenhuma equipe cadastrada.</p>';
         }
+        equipesCheckboxesHTML += '</div>';
 
         this.container.innerHTML = `
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -277,11 +288,17 @@ App.UI.ContactForm = {
                         </div>
                     </div>
 
-                    <div>
+                    <!-- NOVO: Multi-Select Customizado para Equipe -->
+                    <div class="relative">
                         <label class="block text-xs font-bold text-slate-500 mb-1">Equipe</label>
-                        <select id="form-equipe" class="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white ${this.userTeam ? 'bg-slate-100 cursor-not-allowed' : ''}" ${this.userTeam ? 'disabled' : ''}>
-                            ${equipesOptions}
-                        </select>
+                        <div id="form-equipe-btn" class="w-full px-4 py-2.5 border border-slate-300 rounded-xl bg-white text-left flex items-center justify-between cursor-pointer hover:border-indigo-500 transition-colors ${this.userTeam ? 'bg-slate-100 cursor-not-allowed' : ''}" onclick="App.UI.ContactForm.toggleEquipeDropdown()">
+                            <span id="form-equipe-text" class="text-sm text-slate-800 truncate">Selecione...</span>
+                            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                        <div id="form-equipe-dropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto z-20">
+                            ${equipesCheckboxesHTML}
+                        </div>
+                        <input type="hidden" id="form-equipe-hidden" value="">
                     </div>
 
                     <input type="hidden" id="form-id" value="">
@@ -297,6 +314,76 @@ App.UI.ContactForm = {
                 </div>
             </div>
         `;
+
+        // Aplica o estado inicial do campo Equipe (travado ou não)
+        this.applyTeamLockState();
+    },
+
+    // NOVAS FUNÇÕES DO MULTI-SELECT
+    toggleEquipeDropdown: function() {
+        if (this.userTeam && this.lockTeam) return; // Bloqueado
+        
+        let dd = document.getElementById('form-equipe-dropdown');
+        if (!dd) return;
+
+        if (dd.classList.contains('hidden')) {
+            dd.classList.remove('hidden');
+            // Cria overlay para fechar ao clicar fora
+            let overlay = document.createElement('div');
+            overlay.id = 'form-equipe-overlay';
+            overlay.className = 'fixed inset-0 z-[15]';
+            overlay.onclick = () => { dd.classList.add('hidden'); overlay.remove(); };
+            document.body.appendChild(overlay);
+            dd.classList.add('z-20'); // Garante que está acima do overlay
+        } else {
+            dd.classList.add('hidden');
+            let ov = document.getElementById('form-equipe-overlay');
+            if (ov) ov.remove();
+        }
+    },
+
+    updateEquipeSelection: function() {
+        let selected = [];
+        this.container.querySelectorAll('.form-equipe-cb:checked').forEach(cb => selected.push(cb.value));
+        let hidden = document.getElementById('form-equipe-hidden');
+        let text = document.getElementById('form-equipe-text');
+        
+        hidden.value = selected.join(', ');
+        text.innerText = selected.length > 0 ? selected.join(', ') : 'Selecione...';
+    },
+
+    applyTeamLockState: function() {
+        let btn = document.getElementById('form-equipe-btn');
+        let text = document.getElementById('form-equipe-text');
+        let hidden = document.getElementById('form-equipe-hidden');
+        
+        if (this.userTeam && this.lockTeam) {
+            // Trava a seleção na equipe do usuário logado
+            hidden.value = this.userTeam;
+            text.innerText = this.userTeam;
+            
+            // Marca e desabilita as checkboxes
+            this.container.querySelectorAll('.form-equipe-cb').forEach(cb => {
+                let cbVal = cb.value.toString().toUpperCase().trim();
+                let userVal = this.userTeam.toString().toUpperCase().trim();
+                
+                if (cbVal === userVal) {
+                    cb.checked = true;
+                    cb.disabled = true;
+                    cb.parentElement.classList.add('bg-slate-100', 'cursor-not-allowed');
+                } else {
+                    cb.checked = false;
+                    cb.disabled = true;
+                    cb.parentElement.classList.add('hidden');
+                }
+            });
+        } else {
+            // Liberado: garante que todas as opções estão visíveis e habilitadas
+            this.container.querySelectorAll('.form-equipe-cb').forEach(cb => {
+                cb.disabled = false;
+                cb.parentElement.classList.remove('bg-slate-100', 'cursor-not-allowed', 'hidden');
+            });
+        }
     },
 
     lookupPhone: async function() {
@@ -335,7 +422,16 @@ App.UI.ContactForm = {
                 this.container.querySelector('#form-nome').value = res.contact.nome || "";
                 this.container.querySelector('#form-bairro').value = res.contact.bairro || "";
                 this.container.querySelector('#form-ref').value = res.contact.ref || "";
-                this.container.querySelector('#form-equipe').value = res.contact.equipe || this.userTeam;
+                
+                // Lógica para Multi-Select de Equipe
+                let equipeStr = res.contact.equipe || this.userTeam || "";
+                let teamsArr = equipeStr.split(',').map(t => t.trim().toUpperCase());
+                
+                this.container.querySelectorAll('.form-equipe-cb').forEach(cb => {
+                    let cbVal = cb.value.toString().toUpperCase().trim();
+                    cb.checked = teamsArr.includes(cbVal);
+                });
+                this.updateEquipeSelection();
                 
                 const funcaoSelect = this.container.querySelector('#form-funcao');
                 let funcaoExists = false;
@@ -371,10 +467,12 @@ App.UI.ContactForm = {
                     saveBtn.disabled = true;
                     saveBtn.classList.add('opacity-50');
                     
-                    ['form-nome', 'form-bairro', 'form-ref', 'form-equipe', 'form-funcao'].forEach(id => {
+                    ['form-nome', 'form-bairro', 'form-ref', 'form-funcao'].forEach(id => {
                         const el = this.container.querySelector('#' + id);
                         if(el) el.disabled = true;
                     });
+                    // Desabilita o botão de Equipe também
+                    this.container.querySelector('#form-equipe-btn').classList.add('opacity-50', 'pointer-events-none');
                 }
             } else {
                 this.clear(true);
@@ -404,7 +502,8 @@ App.UI.ContactForm = {
         const bairro = this.container.querySelector('#form-bairro').value.trim();
         const phone = this.container.querySelector('#form-phone').value.trim();
         const ref = this.container.querySelector('#form-ref').value.trim();
-        const equipe = this.container.querySelector('#form-equipe').value.trim();
+        // Lê do hidden input agora
+        const equipe = this.container.querySelector('#form-equipe-hidden').value.trim();
         const funcao = this.container.querySelector('#form-funcao').value.trim();
 
         if (!nome || !bairro || !phone) {
@@ -475,16 +574,24 @@ App.UI.ContactForm = {
         this.container.querySelector('#form-ref').value = "";
         this.container.querySelector('#form-funcao').value = "";
         
-        this.container.querySelector('#form-equipe').value = this.userTeam || "";
+        // Reseta o Multi-Select
+        this.container.querySelectorAll('.form-equipe-cb').forEach(cb => {
+            cb.checked = false;
+            cb.disabled = false;
+            cb.parentElement.classList.remove('bg-slate-100', 'cursor-not-allowed', 'hidden');
+        });
+        this.applyTeamLockState(); // Reaplica o bloqueio se necessário
+        
         this.container.querySelector('#form-phone').value = phoneVal;
         
-        ['form-nome', 'form-bairro', 'form-ref', 'form-equipe', 'form-funcao'].forEach(id => {
+        ['form-nome', 'form-bairro', 'form-ref', 'form-funcao'].forEach(id => {
             const el = this.container.querySelector('#' + id);
-            if(el) {
-                el.disabled = false;
-                if(id === 'form-equipe' && this.userTeam) el.disabled = true;
-            }
+            if(el) el.disabled = false;
         });
+        
+        // Reabilita o botão de Equipe se estava desabilitado por contato bloqueado
+        const eqBtn = this.container.querySelector('#form-equipe-btn');
+        if(eqBtn) eqBtn.classList.remove('opacity-50', 'pointer-events-none');
         
         this.container.querySelector('#form-status-badge').classList.add('hidden');
         this.container.querySelector('#form-status-badge').innerText = "";

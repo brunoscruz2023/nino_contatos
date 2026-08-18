@@ -68,7 +68,7 @@ App.Eventos.CRUD = (function() {
                 <div class="space-y-3">
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-1">Telefone do Responsável</label>
-                        <input type="tel" id="task-resp-phone" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="(21) 99999-9999" oninput="App.Eventos.CRUD.handleTaskPhoneInput(this.value)" onblur="App.Eventos.CRUD.lookupTaskResp()">
+                        <input type="tel" id="task-resp-phone" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="(21) 99999-9999" onblur="App.Eventos.CRUD.lookupTaskResp()">
                         <p id="task-resp-name" class="text-xs mt-1 font-medium"></p>
                     </div>
                     <div>
@@ -153,12 +153,10 @@ App.Eventos.CRUD = (function() {
             ]
         });
         
-        // Garante que o botão comece desabilitado
         const btnCreate = document.getElementById('btn-create-task');
         if(btnCreate) btnCreate.disabled = true;
     }
 
-    // NOVO: Manipula o input do telefone para desabilitar o botão se o campo for apagado
     function handleTaskPhoneInput(value) {
         const btnCreate = document.getElementById('btn-create-task');
         const nameEl = document.getElementById('task-resp-name');
@@ -172,7 +170,6 @@ App.Eventos.CRUD = (function() {
         }
     }
 
-    // NOVO: Validação do telefone em tempo real no modal de tarefa
     function lookupTaskResp() {
         const phone = document.getElementById('task-resp-phone').value;
         const nameEl = document.getElementById('task-resp-name');
@@ -196,7 +193,6 @@ App.Eventos.CRUD = (function() {
                 nameEl.innerText = "Responsável: " + res.contact.nome;
                 nameEl.className = "text-xs mt-1 text-emerald-600 font-medium";
                 
-                // Habilita o botão de criar tarefa
                 if(btnCreate) {
                     btnCreate.disabled = false;
                     btnCreate.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
@@ -205,7 +201,6 @@ App.Eventos.CRUD = (function() {
                 nameEl.innerText = "Responsável não encontrado.";
                 nameEl.className = "text-xs mt-1 text-rose-500 font-medium";
                 
-                // Desabilita o botão
                 if(btnCreate) {
                     btnCreate.disabled = true;
                     btnCreate.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
@@ -418,9 +413,17 @@ App.Eventos.CRUD = (function() {
         overlay.classList.remove('hidden');
         overlay.classList.add('flex');
 
+        // Busca a lista de funções para preencher o dropdown do formulário
+        let funcoesArray = [];
+        if (window.dictsGlobal && window.dictsGlobal.funcoes_contato) {
+            funcoesArray = window.dictsGlobal.funcoes_contato.map(f => f.nome);
+        }
+
         App.UI.ContactForm.init('#presence-form-container', {
             canEdit: true, 
             saveButtonText: "Confirmar Presença",
+            lockTeam: false, // Destrava a seleção de equipe
+            funcoes: funcoesArray, // Popula o dropdown de funções
             onCancel: function() {
                 App.Eventos.CRUD.closeModal();
             },
