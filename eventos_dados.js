@@ -6,14 +6,16 @@ App.Eventos = App.Eventos || {};
 let eventosDatabase = [];
 let contatosBase = {};
 let bolhaDatabase = {}; 
-let tarefasDatabase = []; 
+let tarefasDatabase = [];
+let materialsDatabase = []; // NOVO: Array para Movimentação de Materiais
 
 // Constantes de Planilha
 const EVENTOS_SHEET_ID = '1MRycZz_03uglcwJqYs_G3Kzc2osx6S_z9zYxGMAzsNM'; 
 const EVENTOS_SHEET_NAME = 'Eventos';
 const BASE_CONTATOS_SHEET_NAME = 'Base_Contatos';
 const PRESENCAS_SHEET_NAME = 'Presencas';
-const TASKS_SHEET_NAME = 'Tarefas'; 
+const TASKS_SHEET_NAME = 'Tarefas';
+const MATERIALS_SHEET_NAME = 'Materiais_Movimentacao'; // NOVO
 
 // Helper para limpar apóstrofos remanescentes da leitura do Sheets
 function cleanStr(val) {
@@ -29,34 +31,38 @@ App.Eventos.Dados = {
             const cbEv = 'cb_ev_' + Date.now();
             const cbBase = 'cb_bs_' + Date.now();
             const cbPres = 'cb_ps_' + Date.now();
-            const cbTasks = 'cb_tk_' + Date.now(); 
+            const cbTasks = 'cb_tk_' + Date.now();
+            const cbMat = 'cb_mat_db_' + Date.now(); // NOVO
             
             const urlEventos = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbEv}&sheet=${encodeURIComponent(EVENTOS_SHEET_NAME)}`;
             const urlBase = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbBase}&sheet=${encodeURIComponent(BASE_CONTATOS_SHEET_NAME)}`;
             const urlPresencas = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbPres}&sheet=${encodeURIComponent(PRESENCAS_SHEET_NAME)}`;
-            const urlTasks = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbTasks}&sheet=${encodeURIComponent(TASKS_SHEET_NAME)}`; 
+            const urlTasks = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbTasks}&sheet=${encodeURIComponent(TASKS_SHEET_NAME)}`;
+            const urlMaterials = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbMat}&sheet=${encodeURIComponent(MATERIALS_SHEET_NAME)}`; // NOVO
             
-            const [dataEventos, dataBase, dataPresencas, dataTasks] = await Promise.all([
+            const [dataEventos, dataBase, dataPresencas, dataTasks, dataMaterials] = await Promise.all([
                 App.Core.Utils.fetchJsonp(urlEventos, cbEv),
                 App.Core.Utils.fetchJsonp(urlBase, cbBase),
                 App.Core.Utils.fetchJsonp(urlPresencas, cbPres),
-                App.Core.Utils.fetchJsonp(urlTasks, cbTasks) 
+                App.Core.Utils.fetchJsonp(urlTasks, cbTasks),
+                App.Core.Utils.fetchJsonp(urlMaterials, cbMat) // NOVO
             ]);
             
-            this.processarDadosEventos(dataEventos, dataBase, dataPresencas, dataTasks);
+            this.processarDadosEventos(dataEventos, dataBase, dataPresencas, dataTasks, dataMaterials);
             
             try {
                 localStorage.setItem('eventos_cache_v1', JSON.stringify(eventosDatabase));
                 localStorage.setItem('contatos_base_cache_v1', JSON.stringify(contatosBase));
-                localStorage.setItem('tarefas_cache_v1', JSON.stringify(tarefasDatabase)); 
-            } catch(e) { console.error("Erro ao salvar cache de eventos/tarefas", e); }
+                localStorage.setItem('tarefas_cache_v1', JSON.stringify(tarefasDatabase));
+                localStorage.setItem('materials_cache_v1', JSON.stringify(materialsDatabase)); // NOVO
+            } catch(e) { console.error("Erro ao salvar cache de eventos/tarefas/materiais", e); }
 
             const viewEventos = document.getElementById('view-eventos');
             if (!isPreload || (viewEventos && !viewEventos.classList.contains('hidden'))) {
                 renderEventosView();
             }
         } catch (e) {
-            console.error("Erro ao buscar eventos/tarefas", e);
+            console.error("Erro ao buscar eventos/tarefas/materiais", e);
             if (!isPreload) {
                 if (eventosDatabase.length > 0 || tarefasDatabase.length > 0) renderEventosView();
                 else {
@@ -70,17 +76,19 @@ App.Eventos.Dados = {
     loadFromCache: function() {
         const cachedEventos = localStorage.getItem('eventos_cache_v1');
         const cachedContatos = localStorage.getItem('contatos_base_cache_v1');
-        const cachedTarefas = localStorage.getItem('tarefas_cache_v1'); 
+        const cachedTarefas = localStorage.getItem('tarefas_cache_v1');
+        const cachedMaterials = localStorage.getItem('materials_cache_v1'); // NOVO
         
-        if (cachedEventos && cachedContatos && cachedTarefas) { 
+        if (cachedEventos && cachedContatos && cachedTarefas && cachedMaterials) { 
             try {
                 eventosDatabase = JSON.parse(cachedEventos);
                 contatosBase = JSON.parse(cachedContatos);
-                tarefasDatabase = JSON.parse(cachedTarefas); 
+                tarefasDatabase = JSON.parse(cachedTarefas);
+                materialsDatabase = JSON.parse(cachedMaterials); // NOVO
                 window.contatosBase = contatosBase;
                 return true;
             } catch(e) {
-                console.error("Erro ao ler cache de eventos/tarefas", e);
+                console.error("Erro ao ler cache", e);
                 return false;
             }
         }
@@ -115,7 +123,7 @@ App.Eventos.Dados = {
         return participacoes;
     },
 
-    processarDadosEventos: function(jsonEventos, jsonBase, jsonPresencas, jsonTasks) {
+    processarDadosEventos: function(jsonEventos, jsonBase, jsonPresencas, jsonTasks, jsonMaterials) {
         // 1. Monta a base de contatos na memória
         contatosBase = {};
         if (jsonBase && jsonBase.table && jsonBase.table.rows) {
@@ -213,7 +221,7 @@ App.Eventos.Dados = {
                 let dataLimite = row.c[5] && row.c[5].v ? row.c[5].v : "";
                 let status = row.c[6] && row.c[6].v ? cleanStr(row.c[6].v) : "Pendente";
                 let relato = row.c[7] && row.c[7].v ? cleanStr(row.c[7].v) : "";
-                let criadorId = row.c[8] && row.c[8].v ? cleanStr(row.c[8].v).toUpperCase() : ""; // NOVO
+                let criadorId = row.c[8] && row.c[8].v ? cleanStr(row.c[8].v).toUpperCase() : "";
 
                 let parsedDate = App.Core.Utils.parseCustomDate(dataLimite);
                 if (!parsedDate) return; 
@@ -226,7 +234,35 @@ App.Eventos.Dados = {
                     date: parsedDate,
                     status: status,
                     relato: relato,
-                    criadorId: criadorId // NOVO
+                    criadorId: criadorId
+                });
+            });
+        }
+
+        // 5. NOVO: Processa Movimentação de Materiais
+        materialsDatabase = [];
+        if (jsonMaterials && jsonMaterials.table && jsonMaterials.table.rows) {
+            jsonMaterials.table.rows.forEach(row => {
+                if (!row.c || !row.c[1]) return;
+                
+                let timestamp = row.c[0] && row.c[0].v ? new Date(row.c[0].v) : new Date();
+                let id = row.c[1] && row.c[1].v ? cleanStr(row.c[1].v) : "";
+                let tipoMov = row.c[2] && row.c[2].v ? cleanStr(row.c[2].v).toUpperCase() : "";
+                let item = row.c[3] && row.c[3].v ? cleanStr(row.c[3].v) : "Indefinido";
+                let quantidade = row.c[4] && row.c[4].v ? parseInt(row.c[4].v) || 0 : 0;
+                let idOrigemDestino = row.c[5] && row.c[5].v ? cleanStr(row.c[5].v).toUpperCase() : "";
+                let idResponsavel = row.c[6] && row.c[6].v ? cleanStr(row.c[6].v).toUpperCase() : "";
+                let status = row.c[8] && row.c[8].v ? cleanStr(row.c[8].v).toUpperCase() : "CONCLUÍDO";
+                
+                materialsDatabase.push({
+                    timestamp: timestamp,
+                    id: id,
+                    tipoMov: tipoMov,
+                    item: item,
+                    quantidade: quantidade,
+                    idReceptor: idOrigemDestino, // Em distribuição, é o mobilizador
+                    idResponsavel: idResponsavel,
+                    status: status
                 });
             });
         }

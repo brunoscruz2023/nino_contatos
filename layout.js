@@ -50,8 +50,9 @@ App.Layout.Shell = {
         this.setActive(firstView);
     },
 
+    // AJUSTE: Usa o RBAC dinâmico para o Dashboard
     canViewDashboard: function() {
-        return currentSession && currentSession.funcoes && (currentSession.funcoes.agenda === '003' || currentSession.funcoes.agenda === '999' || currentSession.funcoes.admin === '999');
+        return App.Core.Security.hasModuleAccess('dashboard');
     },
 
     renderNav: function() {
@@ -68,22 +69,32 @@ App.Layout.Shell = {
         if (App.Core.Security.hasModuleAccess('mapa')) availableMods.push('mapa');
         if (App.Core.Security.hasModuleAccess('cadastro')) availableMods.push('cadastro');
 
-        // Filtra para não repetir o módulo ativo e limita a 3 itens
-        let otherMods = availableMods.filter(m => m !== this.activeView).slice(0, 3);
+        // 1. REGRA DE REDUNDÂNCIA: Se tem Admin, não mostra Cadastro no menu inferior
+        if (availableMods.includes('admin')) {
+            availableMods = availableMods.filter(m => m !== 'cadastro');
+        }
+
+        // 2. REGRA DE TELA ATIVA: Remove o módulo que está aberto no momento
+        availableMods = availableMods.filter(m => m !== this.activeView);
+
+        // 3. MATRIZ DE PRIORIDADE: Ordena por importância gerencial
+        const priorityMatrix = ['dashboard', 'admin', 'eventos', 'mapa', 'cadastro'];
+        availableMods.sort((a, b) => {
+            return priorityMatrix.indexOf(a) - priorityMatrix.indexOf(b);
+        });
+
+        // 4. APLICA O LIMITE: Pega os 3 primeiros da lista ordenada
+        let otherMods = availableMods.slice(0, 3);
         
         if (otherMods.length === 0) {
             // Se não há outros módulos, o FAB vira Logout
             this.setFab(ICONS.sair, App.Core.Controller.logout, true);
         } else {
-            // Se há outros módulos, o FAB volta a ser contextual (definido no setActive)
-            // e o Logout vai fixo para a direita
-            
-            // NOVA LÓGICA: Distribuição dinâmica para equilibrar os lados
+            // 5. DISTRIBUIÇÃO DINÂMICA: Equilibra os lados do FAB
             let leftMods = [];
             let rightMods = [];
             
             otherMods.forEach(mod => {
-                // Aloca no lado que estiver com menos botões no momento
                 if (leftMods.length <= rightMods.length) {
                     leftMods.push(mod);
                 } else {
@@ -156,7 +167,7 @@ App.Layout.Shell = {
             document.getElementById('view-eventos').classList.remove('hidden');
             document.getElementById('app-title-mobile').innerHTML = "Mapa de Eventos <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
             if (typeof initEventos === 'function') initEventos();
-            this.resetFab(); // Define o FAB padrão da tela de eventos
+            this.resetFab(); 
         } 
         else if (view === 'admin') {
             document.getElementById('view-admin').classList.remove('hidden');
@@ -174,7 +185,6 @@ App.Layout.Shell = {
             document.getElementById('view-dashboard').classList.remove('hidden');
             document.getElementById('app-title-mobile').innerHTML = "Dashboard <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
             if (typeof App.Dashboard !== 'undefined' && App.Dashboard.UI) App.Dashboard.UI.init();
-            // FAB visível, mas neutro (sem ação) no Dashboard
             this.setFab(ICONS.search, null, false, true);
         }
 
@@ -182,9 +192,9 @@ App.Layout.Shell = {
         this.renderNav();
     },
 
-    // NOVO: Define o FAB para Check-in de um evento específico
+    // Define o FAB para Check-in de um evento específico
     setEventFab: function(evId, mobId) {
-        this.fabBtn.style.display = 'flex'; // Garante que está visível
+        this.fabBtn.style.display = 'flex';
         this.setFab(ICONS.checkin, () => {
             if (typeof App.Eventos.CRUD !== 'undefined') {
                 App.Eventos.CRUD.openPresenceModal(evId, mobId);
@@ -192,15 +202,13 @@ App.Layout.Shell = {
         });
     },
 
-    // NOVO: Reseta o FAB ao padrão da view atual
+    // Reseta o FAB ao padrão da view atual
     resetFab: function() {
         if (this.activeView === 'eventos') {
-            this.fabBtn.style.display = 'flex'; // Garante que está visível
+            this.fabBtn.style.display = 'flex';
             if (App.Core.Security.canCreateEvent()) {
-                // Se for supervisor/admin, mostra o "+" de criar evento
                 this.setFab(ICONS.plus, () => { if(typeof App.Eventos.CRUD !== 'undefined') App.Eventos.CRUD.openCreateModal(); });
             } else {
-                // Se for mobilizador, FAB fica visível mas neutro (aguardando abrir evento)
                 this.setFab(ICONS.plus, null, false, true);
             }
         }
@@ -211,7 +219,7 @@ App.Layout.Shell = {
         this.fabBtn.innerHTML = iconHtml;
         
         if (isDisabled) {
-            this.fabBtn.onclick = () => {}; // Sem ação
+            this.fabBtn.onclick = () => {}; 
             this.fabBtn.classList.add('opacity-40', 'pointer-events-none');
         } else {
             this.fabBtn.onclick = onClickCallback;
