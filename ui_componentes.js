@@ -150,6 +150,15 @@ App.UI.PeriodSelector = {
         
         container.querySelectorAll('button[data-period]').forEach(btn => {
             btn.addEventListener('click', function() {
+                // Lógica de ativação de cor sem redesenhar o componente
+                container.querySelectorAll('button[data-period]').forEach(b => {
+                    b.classList.remove('bg-indigo-600', 'text-white', 'shadow-sm');
+                    b.classList.add('bg-slate-100', 'text-slate-600', 'hover:bg-slate-200');
+                });
+                
+                this.classList.remove('bg-slate-100', 'text-slate-600', 'hover:bg-slate-200');
+                this.classList.add('bg-indigo-600', 'text-white', 'shadow-sm');
+
                 onChangeCallback(this.getAttribute('data-period'));
             });
         });

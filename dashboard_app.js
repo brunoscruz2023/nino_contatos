@@ -113,6 +113,46 @@ App.Dashboard.Dados = {
         };
     },
 
+    // NOVO: Métricas de Logística (Materiais)
+    getLogisticsMetrics: function(dateRange) {
+        let totalEntradas = 0;
+        let totalSaidas = 0; // Recebido
+        let totalTransito = 0; // Pendente_Recebimento
+        let receptorTotals = {}; // Para ranking
+
+        if (typeof materialsDatabase !== 'undefined' && materialsDatabase.length > 0) {
+            materialsDatabase.forEach(mov => {
+                if (mov.tipoMov === "ENTRADA") {
+                    totalEntradas += mov.quantidade;
+                } else if (mov.tipoMov === "DISTRIBUICAO") {
+                    if (mov.status === "RECEBIDO") {
+                        totalSaidas += mov.quantidade;
+                        
+                        // Ranking logic (filtrando por data)
+                        let movDate = new Date(mov.timestamp);
+                        if (movDate >= dateRange.start && movDate <= dateRange.end) {
+                            let rId = mov.idReceptor;
+                            if (!receptorTotals[rId]) receptorTotals[rId] = 0;
+                            receptorTotals[rId] += mov.quantidade;
+                        }
+                    } else if (mov.status === "PENDENTE_RECEBIMENTO") {
+                        totalTransito += mov.quantidade;
+                    }
+                }
+            });
+        }
+
+        let rankingArr = Object.keys(receptorTotals).map(rId => ({ id: rId, qtd: receptorTotals[rId] }));
+        rankingArr.sort((a, b) => b.qtd - a.qtd);
+
+        return {
+            estoqueAtual: totalEntradas - totalSaidas - totalTransito,
+            emTransito: totalTransito,
+            distribuido: totalSaidas,
+            topReceptores: rankingArr.slice(0, 5)
+        };
+    },
+
     getDateRange: function(period) {
         let today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -156,11 +196,14 @@ App.Dashboard.UI = {
 
         // Define as abas disponíveis baseado no RBAC
         this.availableTabs = [];
-        if (App.Core.Security.hasModuleAccess('agenda') && (currentSession.funcoes.agenda === '003' || currentSession.funcoes.agenda === '999' || currentSession.funcoes.admin === '999')) {
+        if (App.Core.Security.hasModuleAccess('agenda')) {
             this.availableTabs.push({ id: 'operacao', label: 'Operação' });
         }
-        if (App.Core.Security.hasModuleAccess('mapa') && (currentSession.funcoes.mapa === '003' || currentSession.funcoes.mapa === '999' || currentSession.funcoes.admin === '999')) {
+        if (App.Core.Security.hasModuleAccess('mapa')) {
             this.availableTabs.push({ id: 'territorio', label: 'Território' });
+        }
+        if (App.Core.Security.hasModuleAccess('materiais')) { // NOVO
+            this.availableTabs.push({ id: 'logistica', label: 'Logística' });
         }
 
         // Se a aba atual não estiver mais disponível, reseta para a primeira
@@ -173,11 +216,14 @@ App.Dashboard.UI = {
         // Carrega dados se necessário e renderiza métricas
         const hasEventData = eventosDatabase && eventosDatabase.length > 0;
         const hasMapData = geoDatabase && geoDatabase.length > 0;
+        const hasMaterialsData = typeof materialsDatabase !== 'undefined' && materialsDatabase.length > 0;
 
         if (!hasEventData && this.availableTabs.find(t => t.id === 'operacao')) {
             fetchEventosData(false).then(() => this.renderContent());
         } else if (!hasMapData && this.availableTabs.find(t => t.id === 'territorio')) {
             fetchSpreadsheetData().then(() => this.renderContent());
+        } else if (!hasMaterialsData && this.availableTabs.find(t => t.id === 'logistica')) {
+            fetchEventosData(false).then(() => this.renderContent());
         } else {
             this.renderContent();
         }
@@ -217,7 +263,8 @@ App.Dashboard.UI = {
 
     renderContent: function() {
         if (this.currentTab === 'operacao') this.renderOperacao();
-        if (this.currentTab === 'territorio') this.renderTerritorio();
+        else if (this.currentTab === 'territorio') this.renderTerritorio();
+        else if (this.currentTab === 'logistica') this.renderLogistica(); // NOVO
     },
 
     // ==========================================
@@ -383,6 +430,55 @@ App.Dashboard.UI = {
 
         if (m.totalLeads === 0) {
             html += `<div class="text-center text-slate-400 py-10">Nenhum lead mapeado neste período.</div>`;
+        }
+
+        content.innerHTML = html;
+    },
+
+    // ==========================================
+    // NOVO: ABA: LOGÍSTICA (MATERIAIS)
+    // ==========================================
+    renderLogistica: function() {
+        const content = document.getElementById('dashboard-content');
+        if (!content) return;
+
+        const dateRange = App.Dashboard.Dados.getDateRange(this.currentPeriod);
+        const m = App.Dashboard.Dados.getLogisticsMetrics(dateRange);
+
+        let html = `
+            <div class="grid grid-cols-3 gap-2 md:gap-4">
+                ${App.UI.StatCard.create({ title: "Estoque Atual", value: m.estoqueAtual, color: "text-indigo-600" })}
+                ${App.UI.StatCard.create({ title: "Em Trânsito", value: m.emTransito, color: "text-amber-500" })}
+                ${App.UI.StatCard.create({ title: "Distribuído", value: m.distribuido, color: "text-emerald-600" })}
+            </div>
+        `;
+
+        if (m.topReceptores.length > 0) {
+            html += `
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-lg font-bold text-slate-800 mb-4">Top ${m.topReceptores.length} Receptores de Materiais</h3>
+                    <div class="space-y-3">
+            `;
+            m.topReceptores.forEach((r, idx) => {
+                let medal = ['🥇', '🥈', '🥉', '🏅', '🏅'][idx] || '';
+                let nome = window.contatosBase && window.contatosBase[r.id] ? window.contatosBase[r.id].nome : r.id;
+                
+                html += `
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-2 last:border-0">
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl">${medal}</span>
+                            <p class="font-bold text-slate-800 text-sm">${nome}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xl font-extrabold text-indigo-600">${r.qtd}</p>
+                            <p class="text-[10px] text-slate-400 uppercase">Itens Recebidos</p>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div></div>`;
+        } else {
+            html += `<div class="text-center text-slate-400 py-10">Nenhuma distribuição recebida neste período.</div>`;
         }
 
         content.innerHTML = html;

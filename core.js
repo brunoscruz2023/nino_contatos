@@ -33,7 +33,8 @@ App.Core.Utils = {
             script.src = url;
             document.body.appendChild(script);
             script.onerror = function() { reject(new Error('Falha de rede')); };
-            setTimeout(function() { reject(new Error('Timeout')); }, 10000);
+            // Ajuste de Timeout: Aumentado para 20 segundos para evitar queda em buscas paralelas
+            setTimeout(function() { reject(new Error('Timeout')); }, 20000); 
         });
     },
 
@@ -234,7 +235,6 @@ App.Core.UI.openChangePasswordModal = function(session) {
                     var p1 = document.getElementById('new-pass-1').value;
                     var p2 = document.getElementById('new-pass-2').value;
                     
-                    // Função auxiliar para limpar campos após erro
                     var clearPassFields = function() {
                         document.getElementById('new-pass-1').value = '';
                         document.getElementById('new-pass-2').value = '';

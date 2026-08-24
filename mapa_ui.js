@@ -86,45 +86,45 @@ App.Mapa.UI = {
         selectTeamMobile.innerHTML = '<option value="all">Todas as Equipes</option>';
         selectTeamDesktop.innerHTML = '<option value="all">Todas</option>';
         
-        let userTeams = currentSession.teams.filter(t => t !== 'TODAS');
-        let showFilters = currentSession.teams.includes("TODAS") || userTeams.length > 1;
+        let userTeams = currentSession && currentSession.teams ? currentSession.teams.filter(t => t !== 'TODAS') : [];
+        let isTotalAccess = currentSession && currentSession.teams && currentSession.teams.includes("TODAS");
+        let showFilters = isTotalAccess || userTeams.length > 1;
         
         if (showFilters) {
             wrapperMobile.classList.remove('hidden'); 
             wrapperDesktop.classList.remove('hidden'); 
             wrapperDesktop.classList.add('flex');
 
-            // Coleta todas as assinaturas de equipe existentes nos dados
-            let allSignatures = new Set();
-            geoDatabase.forEach(d => d.nomes.forEach(n => {
-                if(n.rawEquipe) allSignatures.add(n.rawEquipe);
-            }));
+            let teamsToDisplay = [];
+            if (isTotalAccess) {
+                teamsToDisplay = Array.from(allTeamsList);
+            } else {
+                teamsToDisplay = userTeams;
+            }
 
-            let teamsToAnalyze = currentSession.teams.includes("TODAS") ? Array.from(allTeamsList) : userTeams;
+            teamsToDisplay.forEach(function(team) {
+                var optTotalM = document.createElement('option'); 
+                optTotalM.value = `total_${team}`; 
+                optTotalM.innerText = `${team} (Total)`; 
+                selectTeamMobile.appendChild(optTotalM);
+                
+                var optTotalD = document.createElement('option'); 
+                optTotalD.value = `total_${team}`; 
+                optTotalD.innerText = `${team} (Total)`; 
+                selectTeamDesktop.appendChild(optTotalD);
 
-            // Adiciona opções (Total) e (Apenas) para cada equipe individual
-            teamsToAnalyze.forEach(team => {
-                let optTotalM = document.createElement('option'); optTotalM.value = `total_${team}`; optTotalM.innerText = `${team} (Total)`; selectTeamMobile.appendChild(optTotalM);
-                let optTotalD = document.createElement('option'); optTotalD.value = `total_${team}`; optTotalD.innerText = `${team} (Total)`; selectTeamDesktop.appendChild(optTotalD);
-
-                if (allSignatures.has(team)) {
-                    let optOnlyM = document.createElement('option'); optOnlyM.value = `only_${team}`; optOnlyM.innerText = `${team} (Apenas)`; selectTeamMobile.appendChild(optOnlyM);
-                    let optOnlyD = document.createElement('option'); optOnlyD.value = `only_${team}`; optOnlyD.innerText = `${team} (Apenas)`; selectTeamDesktop.appendChild(optOnlyD);
+                if (allTeamsList.has(team)) {
+                    var optOnlyM = document.createElement('option'); 
+                    optOnlyM.value = `only_${team}`; 
+                    optOnlyM.innerText = `${team} (Apenas)`; 
+                    selectTeamMobile.appendChild(optOnlyM);
+                    
+                    var optOnlyD = document.createElement('option'); 
+                    optOnlyD.value = `only_${team}`; 
+                    optOnlyD.innerText = `${team} (Apenas)`; 
+                    selectTeamDesktop.appendChild(optOnlyD);
                 }
             });
-
-            // Adiciona opções (Apenas) para as combinações de equipes
-            allSignatures.forEach(sig => {
-                let sigTeams = sig.split(',').map(s => s.trim());
-                if (sigTeams.length > 1) {
-                    let hasAccess = currentSession.teams.includes("TODAS") || sigTeams.some(t => userTeams.includes(t));
-                    if (hasAccess) {
-                        let optOnlyM = document.createElement('option'); optOnlyM.value = `only_${sig}`; optOnlyM.innerText = `${sig} (Apenas)`; selectTeamMobile.appendChild(optOnlyM);
-                        let optOnlyD = document.createElement('option'); optOnlyD.value = `only_${sig}`; optOnlyD.innerText = `${sig} (Apenas)`; selectTeamDesktop.appendChild(optOnlyD);
-                    }
-                }
-            });
-
         } else {
             wrapperMobile.classList.add('hidden'); 
             wrapperDesktop.classList.add('hidden'); 
@@ -174,7 +174,6 @@ App.Mapa.UI = {
         geoDatabase.forEach(function(data, dIdx) {
             var nomesFiltradosObj = data.nomes.filter(function(n) {
                 var funcaoValida = (currentFunctionFilter === 'all' || n.funcao === currentFunctionFilter);
-                
                 var equipeValida = true;
                 if (currentTeamFilter === 'all') {
                     equipeValida = true;
@@ -185,7 +184,6 @@ App.Mapa.UI = {
                     let signature = currentTeamFilter.substring(5);
                     equipeValida = n.rawEquipe === signature;
                 }
-                
                 return funcaoValida && equipeValida;
             });
 
