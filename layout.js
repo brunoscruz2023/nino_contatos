@@ -58,8 +58,14 @@ App.Layout.Shell = {
     renderNav: function() {
         let navLeft = document.getElementById('nav-left');
         let navRight = document.getElementById('nav-right');
+        let fabContainer = document.getElementById('fab-container');
+        
         navLeft.innerHTML = '';
         navRight.innerHTML = '';
+
+        // OCULTA O FAB E SEU CONTAINER (Medida Emergencial)
+        if (fabContainer) fabContainer.style.display = 'none';
+        if (this.fabBtn) this.fabBtn.style.display = 'none';
 
         let availableMods = [];
         
@@ -83,31 +89,19 @@ App.Layout.Shell = {
             return priorityMatrix.indexOf(a) - priorityMatrix.indexOf(b);
         });
 
-        // 4. APLICA O LIMITE: Pega os 3 primeiros da lista ordenada
-        let otherMods = availableMods.slice(0, 3);
+        // 4. APLICA O LIMITE: Pega os 4 primeiros da lista ordenada (aumentado para 4 pois o FAB saiu)
+        let otherMods = availableMods.slice(0, 4);
         
-        if (otherMods.length === 0) {
-            // Se não há outros módulos, o FAB vira Logout
-            this.setFab(ICONS.sair, App.Core.Controller.logout, true);
-        } else {
-            // 5. DISTRIBUIÇÃO DINÂMICA: Equilibra os lados do FAB
-            let leftMods = [];
-            let rightMods = [];
-            
-            otherMods.forEach(mod => {
-                if (leftMods.length <= rightMods.length) {
-                    leftMods.push(mod);
-                } else {
-                    rightMods.push(mod);
-                }
-            });
-            
-            // Adiciona o logout sempre no final do lado direito
-            rightMods.push('logout');
-            
-            leftMods.forEach(mod => navLeft.appendChild(this.createNavBtn(mod)));
-            rightMods.forEach(mod => navRight.appendChild(this.createNavBtn(mod)));
-        }
+        // Adiciona o logout sempre no final da lista
+        otherMods.push('logout');
+        
+        // 5. DISTRIBUIÇÃO: Todos os itens vão para a esquerda, que ocupa 100% da largura
+        otherMods.forEach(mod => navLeft.appendChild(this.createNavBtn(mod)));
+        
+        // Ajuste de CSS para a barra inferior sem o FAB
+        navLeft.style.width = '100%';
+        navLeft.style.justifyContent = 'space-around'; // Espaça os ícones igualmente
+        navRight.style.display = 'none'; // Esconde o lado direito pois não há FAB
     },
 
     createNavBtn: function(view) {
@@ -161,31 +155,26 @@ App.Layout.Shell = {
             if(mobileTotalCount) mobileTotalCount.classList.remove('hidden');
             if(btnVerContatos) btnVerContatos.classList.remove('hidden');
             if (typeof applyFilters === 'function') applyFilters();
-            this.setFab(ICONS.search, () => { if(typeof toggleModalNomes === 'function') toggleModalNomes(); });
         } 
         else if (view === 'eventos') {
             document.getElementById('view-eventos').classList.remove('hidden');
             document.getElementById('app-title-mobile').innerHTML = "Mapa de Eventos <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
             if (typeof initEventos === 'function') initEventos();
-            this.resetFab(); 
         } 
         else if (view === 'admin') {
             document.getElementById('view-admin').classList.remove('hidden');
             document.getElementById('app-title-mobile').innerHTML = "Painel Admin <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
             if (typeof App.Admin !== 'undefined' && App.Admin.CRUD) App.Admin.CRUD.init();
-            this.setFab(ICONS.search, () => { let i = document.getElementById('admin-phone-search'); if(i) i.focus(); });
         } 
         else if (view === 'cadastro') {
             document.getElementById('view-cadastro').classList.remove('hidden');
             document.getElementById('app-title-mobile').innerHTML = "Cadastro <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
             if (typeof App.Cadastro !== 'undefined' && App.Cadastro.UI) App.Cadastro.UI.init();
-            this.setFab(ICONS.plus, () => { if(typeof App.UI.ContactForm !== 'undefined') App.UI.ContactForm.clear(); });
         }
         else if (view === 'dashboard') {
             document.getElementById('view-dashboard').classList.remove('hidden');
             document.getElementById('app-title-mobile').innerHTML = "Dashboard <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
             if (typeof App.Dashboard !== 'undefined' && App.Dashboard.UI) App.Dashboard.UI.init();
-            this.setFab(ICONS.search, null, false, true);
         }
 
         // Re-renderiza a barra para ocultar o botão ativo e ajustar o FAB
@@ -194,7 +183,7 @@ App.Layout.Shell = {
 
     // Define o FAB para Check-in de um evento específico
     setEventFab: function(evId, mobId) {
-        this.fabBtn.style.display = 'flex';
+        // FAB desativado, a ação de check-in é feita pelo botão dentro do card.
         this.setFab(ICONS.checkin, () => {
             if (typeof App.Eventos.CRUD !== 'undefined') {
                 App.Eventos.CRUD.openPresenceModal(evId, mobId);
@@ -204,32 +193,14 @@ App.Layout.Shell = {
 
     // Reseta o FAB ao padrão da view atual
     resetFab: function() {
-        if (this.activeView === 'eventos') {
-            this.fabBtn.style.display = 'flex';
-            if (App.Core.Security.canCreateEvent()) {
-                this.setFab(ICONS.plus, () => { if(typeof App.Eventos.CRUD !== 'undefined') App.Eventos.CRUD.openCreateModal(); });
-            } else {
-                this.setFab(ICONS.plus, null, false, true);
-            }
-        }
+        // FAB desativado
+        this.setFab(ICONS.plus, null, false, true);
     },
 
     setFab: function(iconHtml, onClickCallback, isLogout = false, isDisabled = false) {
-        this.fabBtn.style.display = 'flex'; // Garante que o FAB sempre apareça
-        this.fabBtn.innerHTML = iconHtml;
-        
-        if (isDisabled) {
-            this.fabBtn.onclick = () => {}; 
-            this.fabBtn.classList.add('opacity-40', 'pointer-events-none');
-        } else {
-            this.fabBtn.onclick = onClickCallback;
-            this.fabBtn.classList.remove('opacity-40', 'pointer-events-none');
-        }
-        
-        if(isLogout) {
-            this.fabBtn.classList.add('logout');
-        } else {
-            this.fabBtn.classList.remove('logout');
-        }
+        // Medida emergencial: Força o FAB a ficar oculto
+        this.fabBtn.style.display = 'none';
+        let fabContainer = document.getElementById('fab-container');
+        if (fabContainer) fabContainer.style.display = 'none';
     }
 };
