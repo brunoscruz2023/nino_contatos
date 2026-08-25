@@ -33,8 +33,7 @@ App.Core.Utils = {
             script.src = url;
             document.body.appendChild(script);
             script.onerror = function() { reject(new Error('Falha de rede')); };
-            // Ajuste de Timeout: Aumentado para 20 segundos para evitar queda em buscas paralelas
-            setTimeout(function() { reject(new Error('Timeout')); }, 20000); 
+            setTimeout(function() { reject(new Error('Timeout')); }, 20000);
         });
     },
 
@@ -127,10 +126,10 @@ App.Core.Security = {
         return this.hasModuleAccess('cadastro') && (currentSession.funcoes['cadastro'] === '002' || currentSession.funcoes['cadastro'] === '999');
     },
     canManageMaterials: function() {
-        return this.hasModuleAccess('materiais') && ['003', '999'].includes(currentSession.funcoes['materiais']);
+        return this.hasModuleAccess('materiais');
     },
     canDistributeMaterial: function() {
-        return this.hasModuleAccess('materiais') && ['002', '003', '999'].includes(currentSession.funcoes['materiais']);
+        return this.hasModuleAccess('materiais');
     }
 };
 
@@ -188,7 +187,6 @@ App.Core.UI.Modal = {
     }
 };
 
-// Função Reutilizável para alternar visibilidade de campos de senha
 App.Core.UI.toggleFieldVisibility = function(inputId, iconShowId, iconHideId) {
     var input = document.getElementById(inputId);
     var iconShow = document.getElementById(iconShowId);
@@ -205,7 +203,6 @@ App.Core.UI.toggleFieldVisibility = function(inputId, iconShowId, iconHideId) {
     }
 };
 
-// Modal de Troca de Senha Obrigatória
 App.Core.UI.openChangePasswordModal = function(session) {
     App.Core.UI.Modal.open({
         title: "Atualização de Senha",
@@ -382,6 +379,14 @@ App.Core.TaskManager = {
         
         tasks = tasks.concat(customTasks).concat(materialTasks); 
 
+        // NOVO: Adiciona pendência de Devolução de Material se houver itens na posse do usuário
+        if (App.Core.Security.hasModuleAccess('materiais')) {
+            let returnableItems = this.getReturnableMaterials(userId);
+            if (returnableItems.length > 0) {
+                tasks.push({ id: 'mat_return', type: 'MAT_RETURN', label: 'Devolver Materiais ao Estoque' });
+            }
+        }
+
         if (tasks.length > 0) {
             let bodyHtml = '<div class="space-y-2">';
             tasks.forEach(task => {
@@ -400,14 +405,46 @@ App.Core.TaskManager = {
         }
     },
 
+    // Calcula materiais que o usuário pode devolver
+    getReturnableMaterials: function(userId) {
+        let received = {}; 
+        let returned = {}; 
+
+        if (typeof materialsDatabase === 'undefined' || !materialsDatabase) return [];
+
+        materialsDatabase.forEach(mov => {
+            if (mov.idReceptor === userId) {
+                if (mov.tipoMov === "DISTRIBUICAO" && mov.status === "RECEBIDO") {
+                    if (!received[mov.item]) received[mov.item] = 0;
+                    received[mov.item] += mov.quantidade;
+                } else if (mov.tipoMov === "DEVOLUCAO") {
+                    if (!returned[mov.item]) returned[mov.item] = 0;
+                    returned[mov.item] += mov.quantidade;
+                }
+            }
+        });
+
+        let returnable = [];
+        for (let item in received) {
+            let balance = received[item] - (returned[item] || 0);
+            if (balance > 0) {
+                returnable.push({ name: item, max: balance });
+            }
+        }
+        return returnable;
+    },
+
+    // Modal de Conclusão de Tarefa Limpo (Sem Devolução)
     showTaskDetails: function(taskId) {
         App.Core.UI.Modal.open({
             title: "Detalhes da Tarefa",
             subtitle: "ID: " + taskId,
             body: `
                 <div class="space-y-3">
-                    <p class="text-sm text-slate-600">Descreva abaixo o que foi realizado nesta tarefa:</p>
-                    <textarea id="task-relato" rows="4" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Material entregue com sucesso. Pessoa não estava em casa, etc."></textarea>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Relato de Execução</label>
+                        <textarea id="task-relato" rows="4" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Material entregue com sucesso. Pessoa não estava em casa, etc."></textarea>
+                    </div>
                 </div>
             `,
             actions: [
@@ -419,17 +456,100 @@ App.Core.TaskManager = {
 
                         App.UI.Loader.show();
                         const coords = await App.Core.Utils.getLocation();
-                        const payload = { action: 'completeTask', taskId: taskId, userId: App.Core.Security.getUserId(), relato: relato, lat: coords.lat, lng: coords.lng };
+                        const userId = App.Core.Security.getUserId();
+                        
+                        const taskPayload = { action: 'completeTask', taskId: taskId, userId: userId, relato: relato, lat: coords.lat, lng: coords.lng };
+                        
+                        try {
+                            await new Promise((resolve, reject) => {
+                                App.Core.API.postEvent(taskPayload, function(res) {
+                                    if (res.status === 'success') resolve(res);
+                                    else reject(res.message || 'Erro ao concluir.');
+                                });
+                            });
+
+                            App.UI.Loader.hide();
+                            App.UI.SuccessToast.show(1500);
+                            App.Core.UI.Modal.close();
+                            
+                            if (typeof tarefasDatabase !== 'undefined') {
+                                let t = tarefasDatabase.find(t => t.id === taskId);
+                                if (t) { t.status = "Concluído"; if (typeof renderEventosView === 'function') renderEventosView(); }
+                            }
+                        } catch (err) {
+                            App.UI.Loader.hide();
+                            alert("Erro ao processar: " + err);
+                        }
+                    },
+                    className: "w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all mb-2"
+                },
+                { text: "Cancelar", onClick: App.Core.UI.Modal.close, className: "w-full bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all" }
+            ]
+        });
+    },
+
+    // NOVO: Modal Exclusivo para Devolução de Material
+    showMaterialReturnModal: function() {
+        let userId = App.Core.Security.getUserId();
+        let returnableItems = App.Core.TaskManager.getReturnableMaterials(userId);
+        
+        let optionsHtml = '<option value="">Selecione um item...</option>';
+        returnableItems.forEach(item => {
+            optionsHtml += `<option value="${item.name}">${item.name} (Max: ${item.max})</option>`;
+        });
+
+        App.Core.UI.Modal.open({
+            title: "Devolução de Materiais",
+            subtitle: "Registre a devolução de sobras para o estoque",
+            body: `
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Item</label>
+                        <select id="mat-ret-item" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                            ${optionsHtml}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Quantidade</label>
+                        <input type="number" id="mat-ret-qtd" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Qtd">
+                    </div>
+                </div>
+            `,
+            actions: [
+                {
+                    text: "Registrar Devolução",
+                    onClick: async function() {
+                        const devItem = document.getElementById('mat-ret-item').value;
+                        const devQtd = parseInt(document.getElementById('mat-ret-qtd').value) || 0;
+                        
+                        if (!devItem || devQtd <= 0) { alert("Selecione um item e informe a quantidade."); return; }
+
+                        let itemData = returnableItems.find(i => i.name === devItem);
+                        if (!itemData || devQtd > itemData.max) {
+                            alert("Quantidade de devolução maior que o permitido para este item.");
+                            return;
+                        }
+
+                        App.UI.Loader.show();
+                        const payload = {
+                            action: 'registerMaterialTransaction',
+                            tipoMov: 'DEVOLUCAO',
+                            item: devItem,
+                            quantidade: devQtd,
+                            idOrigemDestino: userId,
+                            idResponsavel: userId,
+                            refId: 'MANUAL_RETURN',
+                            status: "Concluído"
+                        };
+                        
                         App.Core.API.postEvent(payload, function(res) {
                             App.UI.Loader.hide();
                             if (res.status === 'success') {
                                 App.UI.SuccessToast.show(1500);
                                 App.Core.UI.Modal.close();
-                                if (typeof tarefasDatabase !== 'undefined') {
-                                    let t = tarefasDatabase.find(t => t.id === taskId);
-                                    if (t) { t.status = "Concluído"; if (typeof renderEventosView === 'function') renderEventosView(); }
-                                }
-                            } else { alert("Erro: " + res.message); }
+                            } else {
+                                alert("Erro ao devolver material: " + res.message);
+                            }
                         });
                     },
                     className: "w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all mb-2"
@@ -477,6 +597,8 @@ App.Core.Router = {
             App.Core.TaskManager.showTaskDetails(taskId);
         } else if (taskType === 'MATERIAL_RECEIPT') {
             App.Core.TaskManager.showMaterialReceiptModal(taskId);
+        } else if (taskType === 'MAT_RETURN') { // NOVO
+            App.Core.TaskManager.showMaterialReturnModal();
         }
     }
 };
@@ -512,10 +634,9 @@ App.Core.Controller.performLogin = async function() {
             });
         });
         
-        // VERIFICAÇÃO DE TROCA DE SENHA OBRIGATÓRIA
         if (res.session.mustChangePassword) {
             App.Core.UI.openChangePasswordModal(res.session);
-            return; // Bloqueia a entrada no app
+            return; 
         }
         
         App.Core.Controller.setupSession(res.session);

@@ -50,7 +50,6 @@ App.Admin.CRUD = {
             await this.fetchDictionaries();
         }
 
-        // Verifica RBAC dinâmico para mostrar o bloco de materiais
         if (App.Core.Security.canDistributeMaterial() || App.Core.Security.canManageMaterials()) {
             document.getElementById('admin-materials-section').classList.remove('hidden');
         }
@@ -98,7 +97,6 @@ App.Admin.CRUD = {
                 this.renderAccessForm(res.contact);
             } else {
                 this.state.foundContact = null;
-                // Exibe botão para cadastrar o novo contato usando o modal reutilizável
                 resultArea.innerHTML = `
                     <div class="bg-sky-50 border border-sky-200 p-6 rounded-2xl text-center">
                         <p class="text-sm text-sky-700 font-medium mb-4">Nenhum contato encontrado com este telefone.</p>
@@ -114,9 +112,6 @@ App.Admin.CRUD = {
         }
     },
 
-    // ==========================================
-    // NOVO: Modal de Cadastro Rápido (Reusando App.UI.ContactForm)
-    // ==========================================
     openCreateContactModal: function(phone) {
         App.Core.UI.Modal.open({
             title: "Cadastrar Novo Contato",
@@ -137,10 +132,8 @@ App.Admin.CRUD = {
                 App.Core.UI.Modal.close();
             },
             onSaveSuccess: (contactData) => {
-                // Fecha o modal de cadastro
                 App.Core.UI.Modal.close();
                 
-                // Prepara o objeto do novo contato com permissões zeradas para a tela de acesso
                 let defaultCodigo = "";
                 if (this.state.dictionaries && this.state.dictionaries.modulos) {
                     defaultCodigo = this.state.dictionaries.modulos.map(() => '000').join('');
@@ -149,7 +142,7 @@ App.Admin.CRUD = {
                 const newContactMock = {
                     id: contactData.id,
                     nome: contactData.nome,
-                    telefone: contactData.phone, // Transporta o telefone para exibição
+                    telefone: contactData.phone, 
                     bairro: contactData.bairro,
                     ref: contactData.ref,
                     equipe: contactData.equipe,
@@ -163,7 +156,6 @@ App.Admin.CRUD = {
             }
         });
 
-        // Pré-preenche o telefone e dispara a validação do formulário
         const phoneInput = document.getElementById('form-phone');
         if (phoneInput) {
             phoneInput.value = phone;
@@ -175,7 +167,6 @@ App.Admin.CRUD = {
         const resultArea = document.getElementById('admin-result-area');
         const dicts = this.state.dictionaries;
 
-        // Parser dinâmico para o código de acesso atual
         let currentCodes = {};
         if (contact.codigoAcesso && dicts.modulos) {
             let codStr = contact.codigoAcesso;
@@ -351,15 +342,48 @@ App.Admin.CRUD = {
     // ==========================================
     // MÓDULO DE MATERIAIS (UI)
     // ==========================================
+    
+    // NOVO: Calcula saldos em memória para exibir no dropdown de distribuição
+    getStockBalances: function() {
+        let balances = {};
+        if (typeof materialsDatabase === 'undefined' || !materialsDatabase) return balances;
+
+        materialsDatabase.forEach(mov => {
+            if (!balances[mov.item]) balances[mov.item] = 0;
+            if (mov.tipoMov === "ENTRADA") {
+                balances[mov.item] += mov.quantidade;
+            } else if (mov.tipoMov === "DISTRIBUICAO") {
+                if (mov.status === "RECEBIDO") {
+                    balances[mov.item] -= mov.quantidade;
+                } else if (mov.status === "PENDENTE_RECEBIMENTO") {
+                    balances[mov.item] -= mov.quantidade;
+                }
+            } else if (mov.tipoMov === "DEVOLUCAO") {
+                balances[mov.item] += mov.quantidade;
+            }
+        });
+        return balances;
+    },
+
     openMaterialEntryModal: function() {
+        // Popula o select de itens a partir do dicionário
+        let itemsOptions = '<option value="">Selecione um item...</option>';
+        if (window.dictsGlobal && window.dictsGlobal.materiais_itens) {
+            window.dictsGlobal.materiais_itens.forEach(i => {
+                itemsOptions += `<option value="${i.nome}">${i.nome}</option>`;
+            });
+        }
+
         App.Core.UI.Modal.open({
             title: "Entrada de Material",
             subtitle: "Registre a entrada de insumos na campanha",
             body: `
                 <div class="space-y-3">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 mb-1">Item (Ex: Santinho, Camisa)</label>
-                        <input type="text" id="mat-item" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nome do material">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Item</label>
+                        <select id="mat-item" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                            ${itemsOptions}
+                        </select>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-1">Quantidade</label>
@@ -375,7 +399,7 @@ App.Admin.CRUD = {
                 {
                     text: "Registrar Entrada",
                     onClick: async function() {
-                        const item = document.getElementById('mat-item').value.trim();
+                        const item = document.getElementById('mat-item').value;
                         const quantidade = document.getElementById('mat-quantidade').value.trim();
                         const origem = document.getElementById('mat-origem').value.trim();
 
@@ -407,6 +431,24 @@ App.Admin.CRUD = {
     },
 
     openMaterialDistributionModal: function() {
+        // Calcula saldos e popula o select com itens disponíveis
+        let balances = App.Admin.CRUD.getStockBalances();
+        let itemsOptions = '<option value="">Selecione um item...</option>';
+        
+        if (window.dictsGlobal && window.dictsGlobal.materiais_itens) {
+            window.dictsGlobal.materiais_itens.forEach(i => {
+                let balance = balances[i.nome] || 0;
+                // Só permite selecionar itens com saldo positivo
+                if (balance > 0) {
+                    itemsOptions += `<option value="${i.nome}">${i.nome} (Disp: ${balance})</option>`;
+                }
+            });
+        }
+
+        if (itemsOptions === '<option value="">Selecione um item...</option>') {
+            itemsOptions = '<option value="" disabled>Sem itens em estoque</option>';
+        }
+
         App.Core.UI.Modal.open({
             title: "Distribuir Material",
             subtitle: "Entregue material a um mobilizador",
@@ -419,7 +461,9 @@ App.Admin.CRUD = {
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-1">Item</label>
-                        <input type="text" id="mat-dist-item" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Santinho">
+                        <select id="mat-dist-item" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                            ${itemsOptions}
+                        </select>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-1">Quantidade</label>
@@ -433,7 +477,7 @@ App.Admin.CRUD = {
                     text: "Distribuir",
                     onClick: async function() {
                         const phone = document.getElementById('mat-dist-phone').value;
-                        const item = document.getElementById('mat-dist-item').value.trim();
+                        const item = document.getElementById('mat-dist-item').value;
                         const quantidade = parseInt(document.getElementById('mat-dist-quantidade').value);
                         
                         if (!phone || !item || !quantidade) { alert("Preencha todos os campos."); return; }
@@ -451,7 +495,7 @@ App.Admin.CRUD = {
                             
                             if (!lookupRes.contact) { App.UI.Loader.hide(); alert("Mobilizador não encontrado."); return; }
                             
-                            const balance = await App.Admin.CRUD.getMaterialBalance(item);
+                            const balance = balances[item] || 0;
                             if (quantidade > balance) { App.UI.Loader.hide(); alert("Saldo insuficiente. Disponível: " + balance + " " + item); return; }
                             
                             const payload = {
@@ -512,29 +556,8 @@ App.Admin.CRUD = {
     },
 
     getMaterialBalance: async function(item) {
-        const SHEET_ID = '1MRycZz_03uglcwJqYs_G3Kzc2osx6S_z9zYxGMAzsNM';
-        const SHEET_NAME = 'Materiais_Movimentacao';
-        const cb = 'cb_bal_' + Date.now();
-        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:${cb}&sheet=${encodeURIComponent(SHEET_NAME)}`;
-        
-        try {
-            const data = await App.Core.Utils.fetchJsonp(url, cb);
-            let balance = 0;
-            if (data && data.table && data.table.rows) {
-                data.table.rows.forEach(row => {
-                    if (!row.c || !row.c[2]) return;
-                    let tipo = row.c[2] && row.c[2].v ? row.c[2].v.toString().trim() : "";
-                    let rowItem = row.c[3] && row.c[3].v ? row.c[3].v.toString().trim().toLowerCase() : "";
-                    let qtd = row.c[4] && row.c[4].v ? parseInt(row.c[4].v) : 0;
-                    let status = row.c[8] && row.c[8].v ? row.c[8].v.toString().trim() : "";
-                    
-                    if (rowItem === item.toLowerCase()) {
-                        if (tipo === "ENTRADA") { balance += qtd; } 
-                        else if (tipo === "DISTRIBUICAO" && (status === "Recebido" || status === "Pendente_Recebimento")) { balance -= qtd; }
-                    }
-                });
-            }
-            return balance;
-        } catch (e) { console.error("Erro ao buscar saldo de material", e); return 0; }
+        // Mantida para compatibilidade, mas a lógica principal agora usa getStockBalances
+        const balances = App.Admin.CRUD.getStockBalances();
+        return balances[item] || 0;
     }
 };

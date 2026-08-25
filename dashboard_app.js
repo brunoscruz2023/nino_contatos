@@ -3,7 +3,6 @@ window.App = window.App || {};
 App.Dashboard = App.Dashboard || {};
 
 App.Dashboard.Dados = {
-    // Filtra eventos para o Dashboard baseado em RBAC (ABAC)
     getVisibleEvents: function() {
         if (!currentSession || !currentSession.funcoes) return [];
         
@@ -19,7 +18,6 @@ App.Dashboard.Dados = {
         });
     },
 
-    // Métricas de Eventos
     getEventMetrics: function(dateRange) {
         let totalEventos = 0;
         let totalPessoas = 0;
@@ -71,7 +69,6 @@ App.Dashboard.Dados = {
         };
     },
 
-    // Métricas do Mapa (Crescimento Territorial)
     getMapMetrics: function(dateRange) {
         let totalLeads = 0;
         let novosLeads = 0;
@@ -113,12 +110,13 @@ App.Dashboard.Dados = {
         };
     },
 
-    // NOVO: Métricas de Logística (Materiais)
+    // AJUSTE: Inclui leitura de Devoluções no cálculo do Estoque
     getLogisticsMetrics: function(dateRange) {
         let totalEntradas = 0;
         let totalSaidas = 0; // Recebido
         let totalTransito = 0; // Pendente_Recebimento
-        let receptorTotals = {}; // Para ranking
+        let totalDevolvido = 0; // NOVO
+        let receptorTotals = {}; 
 
         if (typeof materialsDatabase !== 'undefined' && materialsDatabase.length > 0) {
             materialsDatabase.forEach(mov => {
@@ -128,7 +126,6 @@ App.Dashboard.Dados = {
                     if (mov.status === "RECEBIDO") {
                         totalSaidas += mov.quantidade;
                         
-                        // Ranking logic (filtrando por data)
                         let movDate = new Date(mov.timestamp);
                         if (movDate >= dateRange.start && movDate <= dateRange.end) {
                             let rId = mov.idReceptor;
@@ -138,6 +135,8 @@ App.Dashboard.Dados = {
                     } else if (mov.status === "PENDENTE_RECEBIMENTO") {
                         totalTransito += mov.quantidade;
                     }
+                } else if (mov.tipoMov === "DEVOLUCAO") { // NOVO
+                    totalDevolvido += mov.quantidade;
                 }
             });
         }
@@ -146,9 +145,10 @@ App.Dashboard.Dados = {
         rankingArr.sort((a, b) => b.qtd - a.qtd);
 
         return {
-            estoqueAtual: totalEntradas - totalSaidas - totalTransito,
+            estoqueAtual: totalEntradas - totalSaidas - totalTransito + totalDevolvido, // Ajustado
             emTransito: totalTransito,
             distribuido: totalSaidas,
+            devolvido: totalDevolvido, // NOVO
             topReceptores: rankingArr.slice(0, 5)
         };
     },
@@ -194,7 +194,6 @@ App.Dashboard.UI = {
             </div>
         `;
 
-        // Define as abas disponíveis baseado no RBAC
         this.availableTabs = [];
         if (App.Core.Security.hasModuleAccess('agenda')) {
             this.availableTabs.push({ id: 'operacao', label: 'Operação' });
@@ -202,18 +201,16 @@ App.Dashboard.UI = {
         if (App.Core.Security.hasModuleAccess('mapa')) {
             this.availableTabs.push({ id: 'territorio', label: 'Território' });
         }
-        if (App.Core.Security.hasModuleAccess('materiais')) { // NOVO
+        if (App.Core.Security.hasModuleAccess('materiais')) {
             this.availableTabs.push({ id: 'logistica', label: 'Logística' });
         }
 
-        // Se a aba atual não estiver mais disponível, reseta para a primeira
         if (this.availableTabs.length > 0 && !this.availableTabs.find(t => t.id === this.currentTab)) {
             this.currentTab = this.availableTabs[0].id;
         }
 
         this.renderShell();
         
-        // Carrega dados se necessário e renderiza métricas
         const hasEventData = eventosDatabase && eventosDatabase.length > 0;
         const hasMapData = geoDatabase && geoDatabase.length > 0;
         const hasMaterialsData = typeof materialsDatabase !== 'undefined' && materialsDatabase.length > 0;
@@ -230,7 +227,6 @@ App.Dashboard.UI = {
     },
 
     renderShell: function() {
-        // Renderiza Abas
         App.UI.TabNav.render(
             '#dashboard-tabs', 
             this.availableTabs, 
@@ -242,7 +238,6 @@ App.Dashboard.UI = {
             }
         );
 
-        // Renderiza Seletor de Período
         const periodOptions = [
             { value: 'today', label: 'Hoje' },
             { value: '7d', label: '7 Dias' },
@@ -264,12 +259,9 @@ App.Dashboard.UI = {
     renderContent: function() {
         if (this.currentTab === 'operacao') this.renderOperacao();
         else if (this.currentTab === 'territorio') this.renderTerritorio();
-        else if (this.currentTab === 'logistica') this.renderLogistica(); // NOVO
+        else if (this.currentTab === 'logistica') this.renderLogistica();
     },
 
-    // ==========================================
-    // ABA: OPERAÇÃO (EVENTOS)
-    // ==========================================
     renderOperacao: function() {
         const content = document.getElementById('dashboard-content');
         if (!content) return;
@@ -365,9 +357,6 @@ App.Dashboard.UI = {
         content.innerHTML = html;
     },
 
-    // ==========================================
-    // ABA: TERRITÓRIO (MAPA)
-    // ==========================================
     renderTerritorio: function() {
         const content = document.getElementById('dashboard-content');
         if (!content) return;
@@ -435,9 +424,7 @@ App.Dashboard.UI = {
         content.innerHTML = html;
     },
 
-    // ==========================================
-    // NOVO: ABA: LOGÍSTICA (MATERIAIS)
-    // ==========================================
+    // AJUSTE: Renderização de 4 cards (Incluindo Devolvido)
     renderLogistica: function() {
         const content = document.getElementById('dashboard-content');
         if (!content) return;
@@ -446,10 +433,11 @@ App.Dashboard.UI = {
         const m = App.Dashboard.Dados.getLogisticsMetrics(dateRange);
 
         let html = `
-            <div class="grid grid-cols-3 gap-2 md:gap-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
                 ${App.UI.StatCard.create({ title: "Estoque Atual", value: m.estoqueAtual, color: "text-indigo-600" })}
                 ${App.UI.StatCard.create({ title: "Em Trânsito", value: m.emTransito, color: "text-amber-500" })}
                 ${App.UI.StatCard.create({ title: "Distribuído", value: m.distribuido, color: "text-emerald-600" })}
+                ${App.UI.StatCard.create({ title: "Devolvido", value: m.devolvido, color: "text-sky-600" })}
             </div>
         `;
 
