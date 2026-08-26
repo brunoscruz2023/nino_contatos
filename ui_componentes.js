@@ -150,7 +150,6 @@ App.UI.PeriodSelector = {
         
         container.querySelectorAll('button[data-period]').forEach(btn => {
             btn.addEventListener('click', function() {
-                // Lógica de ativação de cor sem redesenhar o componente
                 container.querySelectorAll('button[data-period]').forEach(b => {
                     b.classList.remove('bg-indigo-600', 'text-white', 'shadow-sm');
                     b.classList.add('bg-slate-100', 'text-slate-600', 'hover:bg-slate-200');
@@ -197,6 +196,195 @@ App.UI.TabNav = {
 };
 
 // ==========================================
+// COMPONENTE: CONTACT SEARCH (Busca de Contatos Reutilizável com Dropdown)
+// ==========================================
+App.UI.ContactSearch = {
+    container: null,
+    onResultCallback: null,
+    dropdownVisible: false,
+    currentResults: [],
+    highlightedIndex: -1,
+
+    init: function(containerSelector, config) {
+        this.container = document.querySelector(containerSelector);
+        if (!this.container) return;
+        
+        this.onResultCallback = config.onResult || function(){};
+
+        this.container.innerHTML = `
+            <div class="relative">
+                <div class="flex gap-2">
+                    <input type="text" id="cs-input" class="flex-1 min-w-0 px-4 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nome ou Telefone...">
+                    <button id="cs-btn" onclick="App.UI.ContactSearch.search();" class="w-12 h-12 flex-shrink-0 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center" title="Buscar">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </button>
+                </div>
+                <p id="cs-feedback" class="text-xs mt-1 font-medium hidden"></p>
+                <div id="cs-dropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto z-30"></div>
+            </div>
+        `;
+        
+        const input = document.getElementById('cs-input');
+        if(input) {
+            input.addEventListener('keypress', function(e) { if(e.key === 'Enter') App.UI.ContactSearch.search(); });
+            input.addEventListener('keydown', function(e) { App.UI.ContactSearch.handleKeydown(e); });
+            // Busca ao digitar (com leve atraso)
+            let timeout = null;
+            input.addEventListener('input', function() {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => App.UI.ContactSearch.search(true), 400);
+            });
+        }
+    },
+
+    handleKeydown: function(e) {
+        if (!this.dropdownVisible) return;
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            this.highlightedIndex = Math.min(this.highlightedIndex + 1, this.currentResults.length - 1);
+            this.updateHighlight();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            this.highlightedIndex = Math.max(this.highlightedIndex - 1, 0);
+            this.updateHighlight();
+        } else if (e.key === 'Enter' && this.highlightedIndex > -1) {
+            e.preventDefault();
+            this.selectContact(this.highlightedIndex);
+        } else if (e.key === 'Escape') {
+            this.hideDropdown();
+        }
+    },
+
+    updateHighlight: function() {
+        const items = document.querySelectorAll('#cs-dropdown .cs-item');
+        items.forEach((item, idx) => {
+            if (idx === this.highlightedIndex) {
+                item.classList.add('bg-indigo-50', 'text-indigo-700');
+            } else {
+                item.classList.remove('bg-indigo-50', 'text-indigo-700');
+            }
+        });
+        // Scroll into view
+        const activeItem = items[this.highlightedIndex];
+        if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
+    },
+
+    search: async function(isTyping = false) {
+        const term = document.getElementById('cs-input').value.trim();
+        const feedback = document.getElementById('cs-feedback');
+        
+        if (!term) {
+            this.hideDropdown();
+            feedback.classList.add('hidden');
+            return;
+        }
+        
+        const isPhone = /^\d+$/.test(term.replace(/\s|\(|\)|-/g, ''));
+        const type = isPhone ? 'phone' : 'name';
+        
+        if (!isTyping) {
+            feedback.innerText = "Buscando...";
+            feedback.className = "text-xs mt-1 text-slate-500 animate-pulse";
+            feedback.classList.remove('hidden');
+            App.UI.Loader.show();
+        }
+        
+        const payload = { action: 'lookupContact', term: term, type: type };
+        try {
+            const res = await new Promise((resolve, reject) => {
+                App.Core.API.postEvent(payload, function(data) {
+                    if (data.status === 'success') resolve(data);
+                    else reject('Erro');
+                });
+            });
+            
+            if (!isTyping) App.UI.Loader.hide();
+            
+            const contacts = res.contacts || [];
+            
+            if (contacts.length === 0) {
+                this.hideDropdown();
+                feedback.innerText = "Nenhum contato encontrado.";
+                feedback.className = "text-xs mt-1 text-rose-500 font-medium";
+                feedback.classList.remove('hidden');
+                this.onResultCallback(null);
+            } else if (contacts.length === 1) {
+                this.hideDropdown();
+                const c = contacts[0];
+                feedback.innerText = "Contato encontrado: " + c.nome;
+                feedback.className = "text-xs mt-1 text-emerald-600 font-medium";
+                feedback.classList.remove('hidden');
+                this.onResultCallback(c);
+            } else {
+                // Múltiplos resultados: mostra dropdown
+                feedback.innerText = contacts.length + " contatos encontrados. Selecione um:";
+                feedback.className = "text-xs mt-1 text-slate-500 font-medium";
+                feedback.classList.remove('hidden');
+                this.showDropdown(contacts);
+                this.onResultCallback(null); // Ainda não selecionou ninguém
+            }
+        } catch(e) {
+            if (!isTyping) App.UI.Loader.hide();
+            this.hideDropdown();
+            feedback.innerText = "Erro na busca.";
+            feedback.className = "text-xs mt-1 text-rose-500 font-medium";
+        }
+    },
+
+    showDropdown: function(contacts) {
+        this.currentResults = contacts;
+        this.highlightedIndex = -1;
+        const dropdown = document.getElementById('cs-dropdown');
+        let html = '';
+        contacts.forEach((c, idx) => {
+            html += `
+                <div class="cs-item p-3 hover:bg-indigo-50 cursor-pointer border-b border-slate-100 last:border-0" onclick="App.UI.ContactSearch.selectContact(${idx})">
+                    <p class="text-sm font-bold text-slate-800">${c.nome}</p>
+                    <p class="text-xs text-slate-500">${c.bairro || 'Sem bairro'} | Tel: ${c.telefone || 'N/A'}</p>
+                </div>
+            `;
+        });
+        dropdown.innerHTML = html;
+        dropdown.classList.remove('hidden');
+        this.dropdownVisible = true;
+    },
+
+    hideDropdown: function() {
+        const dropdown = document.getElementById('cs-dropdown');
+        if (dropdown) dropdown.classList.add('hidden');
+        this.dropdownVisible = false;
+        this.highlightedIndex = -1;
+    },
+
+    selectContact: function(index) {
+        const c = this.currentResults[index];
+        if (!c) return;
+        
+        document.getElementById('cs-input').value = c.nome;
+        const feedback = document.getElementById('cs-feedback');
+        feedback.innerText = "Contato selecionado: " + c.nome;
+        feedback.className = "text-xs mt-1 text-emerald-600 font-medium";
+        
+        this.hideDropdown();
+        this.onResultCallback(c);
+    },
+
+    clear: function() {
+        if (!this.container) return;
+        document.getElementById('cs-input').value = '';
+        const feedback = document.getElementById('cs-feedback');
+        if(feedback) feedback.classList.add('hidden');
+        this.hideDropdown();
+    },
+    
+    getInputValue: function() {
+        const input = document.getElementById('cs-input');
+        return input ? input.value : '';
+    }
+};
+
+// ==========================================
 // COMPONENTE: CONTACT FORM (Formulário Reutilizável)
 // ==========================================
 App.UI.ContactForm = {
@@ -234,7 +422,6 @@ App.UI.ContactForm = {
 
         const funcoesOptions = this.funcoesList.map(f => `<option value="${f}">${f}</option>`).join('');
 
-        // Geração do HTML do Multi-Select de Equipes
         let equipesCheckboxesHTML = '<div class="p-2 space-y-1">';
         if (window.dictsGlobal && window.dictsGlobal.equipes) {
             window.dictsGlobal.equipes.forEach(e => {
@@ -297,7 +484,6 @@ App.UI.ContactForm = {
                         </div>
                     </div>
 
-                    <!-- NOVO: Multi-Select Customizado para Equipe -->
                     <div class="relative">
                         <label class="block text-xs font-bold text-slate-500 mb-1">Equipe</label>
                         <div id="form-equipe-btn" class="w-full px-4 py-2.5 border border-slate-300 rounded-xl bg-white text-left flex items-center justify-between cursor-pointer hover:border-indigo-500 transition-colors ${this.userTeam ? 'bg-slate-100 cursor-not-allowed' : ''}" onclick="App.UI.ContactForm.toggleEquipeDropdown()">
@@ -324,26 +510,23 @@ App.UI.ContactForm = {
             </div>
         `;
 
-        // Aplica o estado inicial do campo Equipe (travado ou não)
         this.applyTeamLockState();
     },
 
-    // NOVAS FUNÇÕES DO MULTI-SELECT
     toggleEquipeDropdown: function() {
-        if (this.userTeam && this.lockTeam) return; // Bloqueado
+        if (this.userTeam && this.lockTeam) return;
         
         let dd = document.getElementById('form-equipe-dropdown');
         if (!dd) return;
 
         if (dd.classList.contains('hidden')) {
             dd.classList.remove('hidden');
-            // Cria overlay para fechar ao clicar fora
             let overlay = document.createElement('div');
             overlay.id = 'form-equipe-overlay';
             overlay.className = 'fixed inset-0 z-[15]';
             overlay.onclick = () => { dd.classList.add('hidden'); overlay.remove(); };
             document.body.appendChild(overlay);
-            dd.classList.add('z-20'); // Garante que está acima do overlay
+            dd.classList.add('z-20');
         } else {
             dd.classList.add('hidden');
             let ov = document.getElementById('form-equipe-overlay');
@@ -367,11 +550,9 @@ App.UI.ContactForm = {
         let hidden = document.getElementById('form-equipe-hidden');
         
         if (this.userTeam && this.lockTeam) {
-            // Trava a seleção na equipe do usuário logado
             hidden.value = this.userTeam;
             text.innerText = this.userTeam;
             
-            // Marca e desabilita as checkboxes
             this.container.querySelectorAll('.form-equipe-cb').forEach(cb => {
                 let cbVal = cb.value.toString().toUpperCase().trim();
                 let userVal = this.userTeam.toString().toUpperCase().trim();
@@ -387,7 +568,6 @@ App.UI.ContactForm = {
                 }
             });
         } else {
-            // Liberado: garante que todas as opções estão visíveis e habilitadas
             this.container.querySelectorAll('.form-equipe-cb').forEach(cb => {
                 cb.disabled = false;
                 cb.parentElement.classList.remove('bg-slate-100', 'cursor-not-allowed', 'hidden');
@@ -415,7 +595,7 @@ App.UI.ContactForm = {
 
         App.UI.Loader.show();
 
-        const payload = { action: 'lookupContactByPhone', phone: phone };
+        const payload = { action: 'lookupContact', term: phone, type: 'phone' };
         try {
             const res = await new Promise((resolve, reject) => {
                 App.Core.API.postEvent(payload, function(data) {
@@ -426,14 +606,16 @@ App.UI.ContactForm = {
 
             App.UI.Loader.hide();
 
-            if (res.contact) {
-                this.container.querySelector('#form-id').value = res.contact.id || "";
-                this.container.querySelector('#form-nome').value = res.contact.nome || "";
-                this.container.querySelector('#form-bairro').value = res.contact.bairro || "";
-                this.container.querySelector('#form-ref').value = res.contact.ref || "";
+            // Pega o primeiro resultado do array
+            const contact = res.contacts && res.contacts.length > 0 ? res.contacts[0] : null;
+
+            if (contact) {
+                this.container.querySelector('#form-id').value = contact.id || "";
+                this.container.querySelector('#form-nome').value = contact.nome || "";
+                this.container.querySelector('#form-bairro').value = contact.bairro || "";
+                this.container.querySelector('#form-ref').value = contact.ref || "";
                 
-                // Lógica para Multi-Select de Equipe
-                let equipeStr = res.contact.equipe || this.userTeam || "";
+                let equipeStr = contact.equipe || this.userTeam || "";
                 let teamsArr = equipeStr.split(',').map(t => t.trim().toUpperCase());
                 
                 this.container.querySelectorAll('.form-equipe-cb').forEach(cb => {
@@ -445,18 +627,18 @@ App.UI.ContactForm = {
                 const funcaoSelect = this.container.querySelector('#form-funcao');
                 let funcaoExists = false;
                 for(let i=0; i<funcaoSelect.options.length; i++) {
-                    if(funcaoSelect.options[i].value === res.contact.funcao) {
-                        funcaoSelect.value = res.contact.funcao;
+                    if(funcaoSelect.options[i].value === contact.funcao) {
+                        funcaoSelect.value = contact.funcao;
                         funcaoExists = true;
                         break;
                     }
                 }
-                if(!funcaoExists && res.contact.funcao) {
+                if(!funcaoExists && contact.funcao) {
                     let newOpt = document.createElement('option');
-                    newOpt.value = res.contact.funcao;
-                    newOpt.innerText = res.contact.funcao;
+                    newOpt.value = contact.funcao;
+                    newOpt.innerText = contact.funcao;
                     funcaoSelect.appendChild(newOpt);
-                    funcaoSelect.value = res.contact.funcao;
+                    funcaoSelect.value = contact.funcao;
                 }
 
                 if (this.canEdit) {
@@ -480,7 +662,6 @@ App.UI.ContactForm = {
                         const el = this.container.querySelector('#' + id);
                         if(el) el.disabled = true;
                     });
-                    // Desabilita o botão de Equipe também
                     this.container.querySelector('#form-equipe-btn').classList.add('opacity-50', 'pointer-events-none');
                 }
             } else {
@@ -511,7 +692,6 @@ App.UI.ContactForm = {
         const bairro = this.container.querySelector('#form-bairro').value.trim();
         const phone = this.container.querySelector('#form-phone').value.trim();
         const ref = this.container.querySelector('#form-ref').value.trim();
-        // Lê do hidden input agora
         const equipe = this.container.querySelector('#form-equipe-hidden').value.trim();
         const funcao = this.container.querySelector('#form-funcao').value.trim();
 
@@ -583,13 +763,12 @@ App.UI.ContactForm = {
         this.container.querySelector('#form-ref').value = "";
         this.container.querySelector('#form-funcao').value = "";
         
-        // Reseta o Multi-Select
         this.container.querySelectorAll('.form-equipe-cb').forEach(cb => {
             cb.checked = false;
             cb.disabled = false;
             cb.parentElement.classList.remove('bg-slate-100', 'cursor-not-allowed', 'hidden');
         });
-        this.applyTeamLockState(); // Reaplica o bloqueio se necessário
+        this.applyTeamLockState();
         
         this.container.querySelector('#form-phone').value = phoneVal;
         
@@ -598,7 +777,6 @@ App.UI.ContactForm = {
             if(el) el.disabled = false;
         });
         
-        // Reabilita o botão de Equipe se estava desabilitado por contato bloqueado
         const eqBtn = this.container.querySelector('#form-equipe-btn');
         if(eqBtn) eqBtn.classList.remove('opacity-50', 'pointer-events-none');
         
@@ -823,9 +1001,6 @@ App.UI.HierarchyBuilder = {
         this.render();
     },
 
-    // ==========================================
-    // MÉTODO DE VISUALIZAÇÃO (Somente Leitura)
-    // ==========================================
     renderReadOnlyHtml: function(jsonStr, presencasMap) {
         let tree = [];
         try {

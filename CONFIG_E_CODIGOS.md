@@ -1,7 +1,3 @@
-Não é necessário enviar a versão anterior, pois tenho o histórico completo das nossas itações aqui. 
-
-Aqui está o arquivo **`CONFIG_E_CODIGOS.md`** atualizado na íntegra, refletindo o RBAC de 18 dígitos, as regras do Menu Inteligente, a estrutura completa da aba de Materiais e o novo timeout de rede.
-
 ### Arquivo: `CONFIG_E_CODIGOS.md`
 
 ```markdown
@@ -33,8 +29,8 @@ O código de acesso é uma string numérica composta por blocos de 3 dígitos. C
     *   `Materiais` = `002` (Distribuidor)
     *   `Dashboard` = `001` (Visualizador)
 
-*   **Regras de Interface do Menu Inferior (Layout):**
-    *   Se o usuário possuir `Admin = 999`, o módulo `Cadastro` é ocultado do menu inferior (redundância, pois o cadastro está embutido no Admin).
+*   **Regra de Redundância (Layout):**
+    *   Se o usuário possuir `Admin = 999`, os módulos `Cadastro` e `Materiais` são ocultados do menu inferior (suas funções estão embutidas no painel Admin).
     *   O menu prioriza a exibição de `Dashboard` e `Admin` sobre os demais módulos em caso de limite de espaço na tela.
 
 ## 2. Estrutura de Planilhas e Nomenclaturas
@@ -46,16 +42,18 @@ O código de acesso é uma string numérica composta por blocos de 3 dígitos. C
 *   **Aba `Eventos`**: Colunas A(ID_Evento), B(Nome), C(Data), D(Tipo), E(Bairro), F(Estrutura_JSON), G(Lista_Presenca_Legado), H(Desc), I(Status), J(QR_Token).
 *   **Aba `Presencas`**: Colunas A(Timestamp), B(ID_Evento), C(ID_Organizador), D(ID_Participante), E(Lat), F(Lng).
 *   **Aba `Tarefas`**: Colunas A(Timestamp), B(ID), C(ID_Responsavel), D(Titulo), E(Descricao), F(Data_Limite), G(Status), H(Relato_Execucao), I(ID_Criador).
-*   **Aba `Materiais_Movimentacao`**: Colunas A(Timestamp), B(ID_Transacao), C(Tipo_Mov [ENTRADA, DISTRIBUICAO, DEVOLUCAO]), D(Item), E(Quantidade), F(ID_Origem_Destino), G(ID_Responsavel), H(Ref_ID), I(Status [Concluído, Pendente_Recebimento, Recebido]).
+*   **Aba `Materiais_Itens` (NOVO)**: Colunas A (Cod_Item), B (Nome_Item). Dicionário que alimenta os menus suspensos de seleção de itens na logística.
+*   **Aba `Materiais_Movimentacao`**: Colunas A(Timestamp - *suporta data retroativa*), B(ID_Transacao), C(Tipo_Mov [ENTRADA, DISTRIBUICAO, DEVOLUCAO]), D(Item - *padronizado via dicionário*), E(Quantidade), F(ID_Origem_Destino), G(ID_Responsavel), H(Ref_ID), I(Status [Concluído, Pendente_Recebimento, Recebido]).
 *   **Aba `Logs_Atividades`**: Colunas A(Timestamp), B(Usuario_ID), C(Acao), D(Ref_ID), E(Lat), F(Lng), G(Status).
 
 ### Planilha de Contatos: "Pessoal Campanha"
 *   Aba `Página1`: Colunas A(Bairro), B(Nome), C(Tel), D(Ref), E(Função), F(Equipe - *Nomes separados por vírgula se múltipla*), G(Data), ... Z(ID Base36), AA(Senha_Hash), AB(Codigo_Acesso 18 dígitos).
 
-## 3. Constantes Técnicas (Frontend)
+## 3. Constantes Técnicas (Frontend e Backend)
 *   `SHEET_ID` (Contatos): `1VGgM5QNBY0SiN3VuVYdQB78joPz9blvdrdHNQj9v73I`
 *   `EVENTOS_SHEET_ID` (Reuniões): `1MRycZz_03uglcwJqYs_G3Kzc2osx6S_z9zYxGMAzsNM`
 *   `EVENTOS_POST_URL` (Apps Script): `https://script.google.com/macros/s/AKfycbx5KvXsXLw7L8R3ndPDla7Ni4D1w63wcxpCHoQFIvxLhyzvXFQHkuM3jcoOsREMlkP32g/exec`
-*   `CACHE_VERSION`: `v2`
-*   `fetchJsonp` Timeout: `20000` (20 segundos para requisições paralelas)
+*   `CACHE_VERSION` (Frontend): `v2`
+*   `fetchJsonp` Timeout: `20000` (20 segundos para requisições paralelas via `gviz/tq`)
+*   `CacheService` Key (Backend): `dicts_acessos_v10` (Cache de dicionários por 6 horas)
 ```
