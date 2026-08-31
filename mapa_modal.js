@@ -80,8 +80,9 @@ App.Mapa.Modal = {
         let isTotal = mapLvl === '999';
         let isCard = mapLvl === '003';
         let isZap = mapLvl === '002';
-        let isNome = mapLvl === '001';
-        let temAcesso = isTotal || isCard || isZap || isNome;
+        // [BLOCO A — Item 1.7 / Opção B] Nível 001 não visualiza nomes —
+        // o modal exibe apenas métricas agregadas por bairro (contagens e tendências).
+        let temAcesso = isTotal || isCard || isZap;
 
         const buildBairroCard = (data) => {
             const uiColor = colorsMap[data.regiao] || { text: "text-slate-600", dot: "bg-slate-500", border: "border-slate-400" };
@@ -98,12 +99,11 @@ App.Mapa.Modal = {
                         return `<span class="py-1 flex items-center gap-2 border-b border-slate-100 last:border-0"><a href="https://wa.me/55${n.fone}" target="_blank" class="text-blue-500 font-medium">${n.nome}</a></span>`;
                     } else if (isTotal || isCard) {
                         return `<span class="py-1 flex items-center gap-2 border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 rounded-lg px-2 -mx-2" onclick="App.Mapa.Modal.openContactModal(${data.dIdx}, ${originalIdx})">${n.nome}</span>`;
-                    } else {
-                        return `<span class="py-1 flex items-center gap-2 border-b border-slate-100 last:border-0">• ${n.nome}</span>`;
                     }
+                    return '';
                 }).join('');
             } else {
-                nomesModalHTML = `<div class="text-center text-slate-400 py-6 text-sm">Acesso aos nomes restrito para esta equipe.</div>`;
+                nomesModalHTML = `<div class="text-center text-slate-400 py-6 text-sm">Visualização de nomes disponível a partir do nível de acesso WhatsApp.</div>`;
             }
 
             return `

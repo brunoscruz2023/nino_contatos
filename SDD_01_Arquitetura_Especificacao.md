@@ -1,8 +1,9 @@
+## ARQUIVO 3/3: `SDD_01_Arquitetura_Especificacao.md` (v11.1)
 
 ```markdown
 # SDD - Arquitetura e Especificação Técnica
 **Projeto:** Painel Geográfico e de Eventos
-**Versão:** 11.0 (Registro de Bugs, Decisões de Produto e Roadmap de Correções)
+**Versão:** 11.1 (Registro de Bugs, Decisões de Produto e Roadmap de Correções)
 **Última Atualização:** [Data de Hoje]
 
 ## 1. Visão Geral da Arquitetura
@@ -32,24 +33,32 @@ O sistema é um Web App single-page construído em Vanilla JS, HTML e Tailwind C
 *   `App.UI.ContactForm`: Formulário parametrizado com Multi-Select de Equipes.
 *   `App.UI.HierarchyBuilder`: Construtor e visualizador de árvore (JSON). Inclui `renderReadOnlyHtml`/`renderReadOnlyNodes` para visualização somente-leitura com presenças por mobilizador.
 *   `App.UI.StatCard` / `App.UI.PeriodSelector` / `App.UI.TabNav`: Componentes do Dashboard.
-*   `App.UI.ContactSearch`: Componente de busca reutilizável. Detecta Nome ou Telefone, dropdown flutuante para múltiplos resultados, navegação por teclado.
+*   `App.UI.ContactSearch`: Componente de busca reutilizável. Detecta Nome ou Telefone, dropdown flutuante para múltiplos resultados (z-[130], acima do modal genérico), navegação por teclado. **Semântica de callbacks (v11.1):** busca automática ao digitar só dispara callback com resultado único; zero resultados durante digitação e múltiplos resultados (qualquer modo) não disparam callback — apenas busca explícita com zero resultados dispara `callback(null)`.
 
 ### 2.3. Layout (`layout.js`)
 *   `App.Layout.Shell`: Barra de Navegação Inferior dinâmica.
 *   **FAB Desativado:** Oculto permanentemente (medida emergencial documentada).
 *   **Menu Inferior Inteligente:** Regra de Redundância (Admin oculta Cadastro e Materiais), Matriz de Prioridade (Dashboard > Admin > Agenda > Mapa), limite de 4 itens + logout.
+*   **Rota 'materiais' (v11.1):** `setActive('materiais')` redireciona à view Admin com a aba Materiais pré-selecionada (não há view própria).
 
 ### 2.4. Eventos, Tarefas e Materiais (`eventos_*.js`)
 *   `App.Eventos.Dados`: Busca eventos, contatos (aba `Base_Contatos`), presenças, tarefas e materiais em paralelo.
-*   `App.Eventos.UI` (implementado como funções globais — débito técnico P4.1): Agenda Unificada.
-*   `App.Eventos.Kiosk`: Quiosque QR Code com Auto-check-in.
+*   `App.Eventos.UI` (implementado como funções globais — débito técnico P4.1): Agenda Unificada. Navegação mensal fixa o dia em 1 antes de `setMonth` (v11.1).
+*   `App.Eventos.Kiosk`: Quiosque QR Code com Auto-check-in. Pré-carrega bairros e dicionários no `init` (v11.1 — cold start corrigido).
 
 ### 2.5. Dashboard (`dashboard_app.js`)
 *   `App.Dashboard.Dados`: Agregação em memória. `getLogisticsMetrics()` calcula `estoqueAtual` somando Devoluções.
 *   `App.Dashboard.UI`: Abas condicionais por RBAC (Operação/Agenda, Território/Mapa, Logística/Materiais).
 
 ### 2.6. Admin (`admin_crud.js`) e Cadastro (`cadastro_app.js`)
-*   `App.Admin.CRUD`: Abas internas (`App.UI.TabNav`): Aba Acessos (busca `App.UI.ContactSearch` + RBAC) e Aba Materiais (Entrada/Distribuição, visível apenas com acesso a `materiais`).
+*   `App.Admin.CRUD`: Abas internas (`App.UI.TabNav`) **condicionais por RBAC (v11.1)**: Aba Acessos exige `hasModuleAccess('admin')`; Aba Materiais exige `hasModuleAccess('materiais')`. Guard de aba ativa + subtítulo condicional + fallback defensivo.
+*   `App.Cadastro.UI`: Formulário via `App.UI.ContactForm` com dicionários de `window.dictsGlobal`.
+
+### 2.7. Mapa (`mapa_*.js`) — Níveis de Acesso (v11.1, D3)
+*   **001 (Básico):** Bairros + contagens apenas. **Nomes não trafegam na rede** (query `SELECT A, E, F, G`), não ficam no cache e não são renderizados (mobile/desktop). Cards não-colapsáveis.
+*   **002 (Zap):** Nomes + link WhatsApp.
+*   **003 (Card):** + telefone, referência e modal de detalhes.
+*   **999 (Total):** + função. Contagens por bairro mantidas para todos os níveis (dados agregados alimentam filtros e Dashboard Território).
 
 ## 3. Modelo de Dados (Google Sheets)
 
@@ -58,6 +67,7 @@ O sistema é um Web App single-page construído em Vanilla JS, HTML e Tailwind C
 
 ### 3.2. Planilha "Reuniões"
 *   **Aba `Modulos`:** Define o RBAC (6 linhas/18 dígitos).
+*   **Aba `Funcoes_Modulos`:** Nomenclatura dos níveis. *(D3: descrição do nível 001 do Mapa ajustada pelo gestor para refletir "sem nomes".)*
 *   **Aba `Materiais_Itens`:** A(Cod_Item), B(Nome_Item). Dicionário de padronização.
 *   **Aba `Materiais_Movimentacao`:** A(Timestamp retroativo), B(ID_Transacao), C(Tipo_Mov), D(Item), E(Quantidade), F(ID_Origem_Destino), G(ID_Responsavel), H(Ref_ID), I(Status).
 *   **Aba `Base_Contatos`:** Espelho de contatos usado para login e lookup (colunas idênticas à Pessoal Campanha).
@@ -89,41 +99,45 @@ O sistema é um Web App single-page construído em Vanilla JS, HTML e Tailwind C
 *   Refatoração do Admin em Abas, `App.UI.ContactSearch`, Menu Inferior Inteligente sem FAB.
 
 ### Próximos Passos
-1.  **BLOQUEADO — Etapa 10 (Botão de Ajuda In-App):** somente após conclusão das prioridades de correção definidas na seção 7 (P1 a P5).
+1.  **BLOQUEADO — Correções P1 a P5** (ver seção 7).
+2.  **BLOQUEADO — Fila Pós-Campo** (ver seção 7.6): Etapa 10 (Ajuda In-App) e Novo nível RBAC "Nome" (D5).
 
 ---
 
-## 7. Registro de Bugs, Decisões de Produto e Roadmap de Correções (NOVO)
+## 7. Registro de Bugs, Decisões de Produto e Roadmap de Correções
 
-> Origem: auditoria técnica completa de todos os 19 arquivos do sistema (documentação, frontend e backend), conduzida nas visões de Gerente de Produto (PM), Analista Sênior (AS) e Desenvolvedor (DV).
+> Origem: auditoria técnica completa de todos os 19 arquivos do sistema (documentação, frontend e backend), conduzida nas visões de Gerente de Produto (PM), Analista Sênior (AS) e Desenvolvedor (DV). Atualizada com os achados da validação em ambiente real do Bloco A.
 
 ### 7.1. Metodologia de Priorização
-Ordem de atendimento: **P1 Funcionamento de Campo** (impacto imediato na operação) → **P2 Lógica e Integridade de Dados** → **P3 Segurança** (decisão D2) → **P4 Débitos Técnicos** → **P5 Documentação** (decisão explícita: por último) → **Etapa 10 e novas implementações** (bloqueadas até conclusão de P1–P5).
+Ordem de atendimento: **P1 Funcionamento de Campo** (impacto imediato na operação) → **P2 Lógica e Integridade de Dados** → **P3 Segurança** (decisão D2) → **P4 Débitos Técnicos** → **P5 Documentação** (decisão explícita: por último) → **Fila Pós-Campo / novas implementações** (bloqueadas até conclusão de P1–P5).
 
 ### 7.2. Decisões de Produto Registradas
 
 | ID | Decisão | Status |
 |---|---|---|
-| D1 | Dashboard deve ter acesso às informações equivalente aos ABAC dos módulos correspondentes. Abas condicionais já implementadas; filtro de dados da Aba Operação deve equiparar-se à Agenda (`001` filtra por participação; `002+` vê tudo). | ✅ Decidido — escopo definido (~8 linhas em `dashboard_app.js`) |
+| D1 | Dashboard deve ter acesso às informações equivalente aos ABAC dos módulos correspondentes. Abas condicionais já implementadas; filtro de dados da Aba Operação deve equiparar-se à Agenda (`001` filtra por participação; `002+` vê tudo). | ✅ Decidido — escopo definido (~8 linhas em `dashboard_app.js`), execução na P2 |
 | D2 | Segurança (validação de autorização no Apps Script) endereçada após correções de lógica. Justificativa: uso restrito e não comercial. | ✅ Decidido |
-| D3 | Nível `001` do Mapa não visualizar nomes de contatos. | 🔵 Em Análise — Opção A (bloqueio de UI, ~12 linhas) vs. Opção B (bloqueio total: query sem coluna B, ~20 linhas, privacidade completa). Recomendação técnica: **Opção B**. |
-| D4 | Estratégia de execução das correções. | 🔵 Em Análise — Recomendação: 3 blocos (A: itens frontend isolados 1.2/1.3/1.4/1.6; B: cache bump 1.5; C: backend 1.1 com teste em ambiente espelho). |
+| D3 | Nível `001` do Mapa não visualiza nomes de contatos. Implementado via **Opção B** (bloqueio total: query sem coluna B, nomes não trafegam na rede nem ficam em cache). Nomenclatura do nível na aba `Funcoes_Modulos` ajustada pelo gestor. | ✅ Implementado e validado (T11, T12, T14–T17); T13 e T18 pendentes |
+| D4 | Estratégia de execução das correções: **3 blocos** (A: frontend isolado; B: cache bump; C: backend com teste em ambiente espelho). | ✅ Em execução — Bloco A codificado; validação em curso (ver 7.5) |
+| D5 | **Novo nível RBAC "Nome" no módulo Mapa** (ver nomes sem WhatsApp/telefone): escala futura 001 Básico / 002 Nome / 003 Zap / 004 Card / 999 Total, com migração de códigos (002→003, 003→004) via script no Apps Script. Cache invalida automaticamente (segregação por nível na cacheKey). Interim: nomenclatura corrigida na planilha (executado). | ✅ Decidido — **fila pós-campo** (ver 7.6) |
 
 ### 7.3. Tabela Consolidada de Correções
 
-Legenda de status: ⬜ Pendente | 🔵 Em Análise/Decisão | ✅ Decidido (aguardando janela)
+Legenda de status: ⬜ Pendente | 🔄 Codificado/Em validação | ✅ Validado em produção | 🔵 Em Análise/Decisão
 
 #### P1 — Funcionamento de Campo (crítico, impacto imediato em operação)
 
 | # | Item | Visão | Arquivo(s) | Esforço | Risco | Status |
 |---|---|---|---|---|---|---|
 | 1.1 | **Bug: Criação de Tarefa Avulsa quebrada** — action `lookupContactByPhone` inexistente no backend; payload (`phone`) e retorno (`res.contact` singular) divergem do contrato real (`lookupContact` com `term`/`type`, retorna `contacts` array) | DV | `eventos_crud.js` + `Code.gs` | Médio | Alto | ⬜ Bloco C |
-| 1.2 | **Bug: `setActive('materiais')` sem view própria** — tela preta para perfis com `Materiais ≠ 000` e `Admin = 000` | PM/AS | `layout.js` | Baixo | Baixo | ⬜ Bloco A |
-| 1.3 | **Bug: Kiosk cold start** — sem `dictsGlobal`/`geoDicionario`/`funcoesList` (datalist vazio, sem equipes, sem funções) | PM | `eventos_kiosk.js` | Baixo | Baixo | ⬜ Bloco A |
-| 1.4 | **Bug: Navegação entre meses pula fevereiro** — `setMonth` em dias 29–31 desloca o mês | DV | `eventos_app.js` | Baixo | Baixo | ⬜ Bloco A |
-| 1.5 | **Cache bump `_v1` → `CACHE_VERSION`** — invalida caches obsoletos de eventos/tarefas/materiais | AS | `eventos_dados.js` | Baixo | Médio (re-fetch global) | ⬜ Bloco B |
-| 1.6 | **Bug: z-index do `ContactSearch` em modal** — dropdown (z-30) atrás do overlay (z-120) em "Distribuir Material" | DV | `ui_componentes.js` | Baixo | Baixo | ⬜ Bloco A |
-| 1.7 | **Discrepância nível `001` Mapa vs. Manual** — código exibe nomes; manual diz "sem nomes" | PM | `mapa_dados/ui/modal/mobile.js` | Baixo | Baixo | 🔵 D3 (Opção A/B) |
+| 1.2 | **Bug: `setActive('materiais')` sem view própria** — tela preta para perfis com `Materiais ≠ 000` e `Admin = 000` | PM/AS | `layout.js` | Baixo | Baixo | 🔄 Codificado; T2/T3 aprovados; T1 aprovado parcialmente (revelou item 1.8) |
+| 1.3 | **Bug: Kiosk cold start** — sem `dictsGlobal`/`geoDicionario`/`funcoesList` (datalist vazio, sem equipes, sem funções) | PM | `eventos_kiosk.js` | Baixo | Baixo | 🔄 Codificado; T4–T6 pendentes |
+| 1.4 | **Bug: Navegação entre meses pula fevereiro** — `setMonth` em dias 29–31 desloca o mês | DV | `eventos_app.js` | Baixo | Baixo | ✅ Validado (T7) |
+| 1.5 | **Cache bump `_v1` → `CACHE_VERSION`** — invalida caches obsoletos de eventos/tarefas/materiais | AS | `eventos_dados.js` | Baixo | Médio (re-fetch global) | ⬜ Bloco B (aguarda conclusão do Bloco A) |
+| 1.6 | **Bug: z-index do `ContactSearch` em modal** — dropdown (z-30) atrás do overlay (z-120) em "Distribuir Material" | DV | `ui_componentes.js` | Baixo | Baixo | ✅ Validado (T8, T9) |
+| 1.7 | **Nível `001` do Mapa sem visualização de nomes** — Opção B (bloqueio total: query, memória, cache e render) | PM/D3 | `mapa_dados/ui/modal/mobile.js` | Baixo | Baixo | 🔄 Codificado; T11, T12, T14–T17 aprovados; T13, T18 pendentes |
+| 1.8 | **Bug: Aba Acessos exposta a perfis sem admin** — revelado na validação do Bloco A (T1): o redirecionamento Estoque→Admin dava acesso à busca/RBAC/senha/cadastro para perfis `Admin=000`. Correção: abas condicionais por RBAC + guard de aba ativa + subtítulo condicional | PM/AS | `admin_crud.js` | Baixo | Alto (exposição de RBAC) | 🔄 Codificado — aguardando reteste |
+| 1.9 | **Bug: `ContactSearch` dispara callback prematuro** — revelado na validação do Bloco A (T1): durante a digitação, exibia "não encontrado" + botão de cadastro com termo parcial; com múltiplos resultados, exibia estado contraditório. Correção: semântica de callbacks (digitação com 0 resultados e múltiplos resultados não disparam callback) | DV | `ui_componentes.js` | Baixo | Baixo | 🔄 Codificado — aguardando reteste |
 
 #### P2 — Correções de Lógica e Integridade de Dados
 
@@ -137,7 +151,7 @@ Legenda de status: ⬜ Pendente | 🔵 Em Análise/Decisão | ✅ Decidido (agua
 | 2.6 | Frontend não valida "123456" em `saveAccess` (SDD exige validação dupla) | PM/DV | `admin_crud.js` | Baixo | Nenhum | ⬜ |
 | 2.7 | Inconsistência de case em status de materiais (backend mixed case; dois caminhos frontend verificam diferentemente) | DV | `Code.gs` + `core.js` | Baixo | Baixo | ⬜ |
 | 2.8 | `fetchJsonp` não remove script/callback em timeout — vazamento | DV | `core.js` | Baixo | Baixo | ⬜ |
-| 2.9 | **Equiparar `getVisibleEvents` (Dashboard) ao ABAC da Agenda** — conforme Decisão D1 | AS | `dashboard_app.js` | Baixo (~8 linhas) | Baixo | ✅ D1 |
+| 2.9 | **Equiparar `getVisibleEvents` (Dashboard) ao ABAC da Agenda** — conforme Decisão D1 | AS | `dashboard_app.js` | Baixo (~8 linhas) | Baixo | ✅ D1 — aguardando janela de execução |
 | 2.10 | `submitData` invalida cache do Mapa em vez do cache de Eventos | DV | `eventos_crud.js` | Baixo | Baixo | ⬜ |
 | 2.11 | StatCards da Logística são totais acumulados, mas ranking é filtrado por período — inconsistência semântica | DV | `dashboard_app.js` | Médio | Baixo | ⬜ |
 
@@ -181,22 +195,54 @@ Legenda de status: ⬜ Pendente | 🔵 Em Análise/Decisão | ✅ Decidido (agua
 | 5.3 | Revisão final das seções 1–6 deste SDD após conclusão das correções (refletir mudanças de código) | AS | `SDD_01` | Médio | ⬜ |
 
 ### 7.4. Regra de Bloqueio
-A **Etapa 10 (Botão de Ajuda In-App)** e quaisquer novas implementações só serão iniciadas após a conclusão de P1 a P5.
+A **Fila Pós-Campo** (seção 7.6) e quaisquer novas implementações só serão iniciadas após a conclusão de P1 a P5.
 
-### 7.5. Estratégia de Execução (Pendente de Decisão — D4)
-Recomendação técnica: execução em **3 blocos**:
-*   **Bloco A** — 1.2 + 1.3 + 1.4 + 1.6 (frontend, arquivos independentes, deploy único).
-*   **Bloco B** — 1.5 (cache bump, efeito sistêmico isolado).
-*   **Bloco C** — 1.1 (backend, teste em ambiente espelho antes de promover).
-Cada bloco terá Procedimento de Teste estruturado antes do avanço ao seguinte.
+### 7.5. Estratégia de Execução (D4) — Andamento
+*   **Bloco A** (1.2, 1.3, 1.4, 1.6 + 1.7/D3): codificado e em validação.
+    *   Aprovados: T2, T3, T7, T8, T9, T10, T11, T12, T14, T15, T16, T17.
+    *   Reprovado: T1 → gerou correções complementares 1.8 e 1.9 (codificadas, aguardando reteste).
+    *   Pendentes: T4, T5, T6 (kiosk), T13 (payload sem nomes — validação central da Opção B), T18 (cache segregado).
+*   **Bloco B** (1.5 — cache bump): bloqueado até aprovação final do Bloco A.
+*   **Bloco C** (1.1 — tarefa avulsa, backend): bloqueado até Bloco B; exigirá ambiente espelho (cópia da planilha + cópia do Apps Script) antes de promover.
+
+### 7.6. Fila Pós-Campo (bloqueada até conclusão de P1–P5)
+
+| # | Item | Origem | Escopo Preliminar |
+|---|---|---|---|
+| PC.1 | **Etapa 10: Botão de Ajuda In-App** (utilizando `HELP_RAPIDO.md` filtrado por RBAC) | Roadmap original | A definir quando desbloqueada |
+| PC.2 | **Novo nível RBAC "Nome" no módulo Mapa** (D5) — permitir visualizar nomes sem WhatsApp/telefone | Validação do Bloco A (T11) | Renumerar escala do Mapa: 001 Básico / 002 Nome / 003 Zap / 004 Card / 999 Total. Migração de códigos existentes (002→003, 003→004) via script no Apps Script. Ajustar `mapa_dados.js` (queries), `mapa_ui/modal/mobile.js` (renderização por nível), `Code.gs` (`gerarLegadoDeFuncoes`). Cache invalida automaticamente pela segregação por nível na cacheKey. Atualizar `Funcoes_Modulos` na planilha. |
 ```
 
 ---
 
-## Pendências de Decisão (Resumo)
+# PROCEDIMENTO DE TESTE — Reteste T1 (itens 1.8 e 1.9)
 
-| # | O que falta decidir | Impacto |
+**Pré-condições:** perfis (D) `Materiais=002, Admin=000`; (E) `Admin=999`; (F) `Admin=002 ou 003, Materiais=000`; contato com nome comum (múltiplos) na base; termo que NÃO existe na base.
+
+| # | Teste | Passos | Resultado Esperado |
+|---|---|---|---|
+| **TR1** | Abas — perfil D (só Materiais) | Login perfil D → "Estoque" | **Somente aba Materiais** visível (sem aba Acessos). Subtítulo: "Controle de entrada e distribuição de materiais." Botões Entrada/Distribuir funcionais |
+| **TR2** | Abas — perfil E (admin total) | Login perfil E → Admin | Ambas as abas visíveis; alternância funcional; subtítulo completo |
+| **TR3** | Abas — perfil F (só Admin) | Login perfil F → Admin | **Somente aba Acessos**; subtítulo "Gerencie acessos e contatos da campanha." |
+| **TR4** | Sem callback prematuro | Perfil E → Acessos → digitar termo parcial que não existe (pausar 1s) | Feedback discreto cinza abaixo do campo ("Nenhum contato encontrado para este termo"); **área de "Cadastrar Novo Contato" NÃO aparece** durante a digitação |
+| **TR5** | Múltiplos sem contradição | Digitar nome comum até múltiplos resultados | Dropdown com resultados; **sem** área "não encontrado" embaixo; sem botão de cadastro prematuro |
+| **TR6** | Busca explícita sem resultado | Digitar termo inexistente → pressionar **Enter** (ou botão) | Área "Nenhum contato encontrado" + botão "Cadastrar Novo Contato" aparece (comportamento correto mantido) |
+| **TR7** | Auto-carregamento único | Digitar termo com exatamente 1 resultado | Formulário RBAC carrega automaticamente (mantido) |
+| **TR8** | Seleção via dropdown | TR5 → setas ↑↓ + Enter; clicar item | Contato selecionado; formulário carrega |
+| **TR9** | Modal Distribuir — estado do botão | Admin → Materiais → Distribuir → digitar parcial/múltiplos | Botão "Distribuir" permanece **desabilitado** até seleção definitiva ou resultado único; dropdown acima do modal (z-index do Bloco A) |
+| **TR10** | Regressão smoke | Perfil E: criar/editar 1 contato no Admin; distribuir 1 material | Fluxos intactos |
+
+**Critério de aprovação:** TR1–TR10 sem falhas → itens 1.8 e 1.9 marcados ✅ no SDD.
+
+---
+
+## Pendências Abertas
+
+| # | Item | Impacto |
 |---|---|---|
-| 1 | **Estratégia de execução da P1** — autorizar blocos A/B/C, um-a-um, ou outro formato | Define o início da codificação |
-| 2 | **D3 — Opção A ou B para o item 1.7** (001 sem nomes) | Recomendo Opção B (privacidade real, custo marginal de ~8 linhas) |
-| 3 | Confirmar se a decisão D4 incluirá o 1.7 na P1 (se decidido antes) ou se ele desce para P2 | Ordem da tabela |
+| 1 | **Reteste T1 (TR1–TR10)** após deploy dos 2 arquivos | Fecha itens 1.8 e 1.9 |
+| 2 | **T4, T5, T6** (kiosk cold start) | Fecha item 1.3 |
+| 3 | **T13** (payload `gviz/tq` sem nomes para `001` — validação central da Opção B) e **T18** (cache segregado) | Fecha item 1.7/D3 |
+| 4 | Após 1–3: **aprovação formal do Bloco A** → apresento proposta detalhada do **Bloco B** (cache bump) para autorização | Libera sequência do roadmap |
+
+**Aguardando resultados dos testes.**

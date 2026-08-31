@@ -13,10 +13,20 @@ App.Admin.CRUD = {
         const view = document.getElementById('view-admin');
         if (!view) return;
 
+        // [FIX T1-a / Item 1.8] Abas condicionais por RBAC:
+        // a aba Acessos exige acesso ao módulo admin; a aba Materiais exige acesso ao módulo materiais.
+        // Perfis com apenas Materiais (ex.: Admin=000, Materiais=002) passam a ver somente a aba Materiais.
+        const hasAdmin = App.Core.Security.hasModuleAccess('admin');
+        const hasMateriais = App.Core.Security.hasModuleAccess('materiais');
+
+        let subtitleText = "Gerencie acessos, contatos e logística da campanha.";
+        if (hasAdmin && !hasMateriais) subtitleText = "Gerencie acessos e contatos da campanha.";
+        else if (!hasAdmin && hasMateriais) subtitleText = "Controle de entrada e distribuição de materiais.";
+
         view.innerHTML = `
             <div class="max-w-4xl mx-auto p-4 md:p-8 w-full">
                 <div class="mb-4">
-                    <p class="text-sm text-slate-500">Gerencie acessos, contatos e logística da campanha.</p>
+                    <p class="text-sm text-slate-500">${subtitleText}</p>
                 </div>
 
                 <div id="admin-tabs"></div>
@@ -28,9 +38,15 @@ App.Admin.CRUD = {
             await this.fetchDictionaries();
         }
 
-        let availableTabs = [{ id: 'acessos', label: 'Acessos' }];
-        if (App.Core.Security.hasModuleAccess('materiais')) {
-            availableTabs.push({ id: 'materiais', label: 'Materiais' });
+        let availableTabs = [];
+        if (hasAdmin) availableTabs.push({ id: 'acessos', label: 'Acessos' });
+        if (hasMateriais) availableTabs.push({ id: 'materiais', label: 'Materiais' });
+
+        // [FIX T1-a / Item 1.8] Guard: se a aba ativa não está disponível para este perfil
+        // (ex.: activeTab='acessos' vindo do default, mas o usuário só tem Materiais),
+        // cai para a primeira aba permitida.
+        if (availableTabs.length === 0 || !availableTabs.find(t => t.id === this.state.activeTab)) {
+            this.state.activeTab = availableTabs.length > 0 ? availableTabs[0].id : null;
         }
 
         const handleTabChange = (tabId) => {
@@ -93,6 +109,11 @@ App.Admin.CRUD = {
                     </button>
                 </div>
             `;
+        } else {
+            // [FIX T1-a / Item 1.8] Caminho defensivo: perfil sem acesso a nenhuma aba do painel.
+            // Não deve ocorrer pelo fluxo normal de navegação (Layout só roteia com acesso),
+            // mas protege contra acessos diretos ou mudanças de permissão em sessão ativa.
+            content.innerHTML = `<div class="text-center text-slate-400 py-10 text-sm">Sem permissão de acesso a este painel.</div>`;
         }
     },
 

@@ -24,7 +24,9 @@ App.Mapa.Mobile = {
         App.UI.AccordionList.initGlobalListener('#mobile-list-content');
 
         let mapLvl = (currentSession && currentSession.funcoes) ? currentSession.funcoes.mapa : '000';
-        let temAcesso = ['001', '002', '003', '999'].includes(mapLvl);
+        // [BLOCO A — Item 1.7 / Opção B] Nível 001 não expande cards (sem nomes para exibir):
+        // o card permanece não-colapsável, apresentando apenas a contagem do bairro.
+        let temAcesso = ['002', '003', '999'].includes(mapLvl);
 
         geoDatabase.forEach(function(data) {
             var uiColor = colorsMap[data.regiao] || { text: "text-slate-600", dot: "bg-slate-500", border: "border-slate-400" };

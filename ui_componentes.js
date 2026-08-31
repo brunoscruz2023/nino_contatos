@@ -220,7 +220,8 @@ App.UI.ContactSearch = {
                     </button>
                 </div>
                 <p id="cs-feedback" class="text-xs mt-1 font-medium hidden"></p>
-                <div id="cs-dropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto z-30"></div>
+                <!-- [BLOCO A — Item 1.6] z-[130]: dropdown acima do overlay do modal genérico (z-[120]) -->
+                <div id="cs-dropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto z-[130]"></div>
             </div>
         `;
         
@@ -228,7 +229,6 @@ App.UI.ContactSearch = {
         if(input) {
             input.addEventListener('keypress', function(e) { if(e.key === 'Enter') App.UI.ContactSearch.search(); });
             input.addEventListener('keydown', function(e) { App.UI.ContactSearch.handleKeydown(e); });
-            // Busca ao digitar (com leve atraso)
             let timeout = null;
             input.addEventListener('input', function() {
                 clearTimeout(timeout);
@@ -265,7 +265,6 @@ App.UI.ContactSearch = {
                 item.classList.remove('bg-indigo-50', 'text-indigo-700');
             }
         });
-        // Scroll into view
         const activeItem = items[this.highlightedIndex];
         if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
     },
@@ -303,12 +302,28 @@ App.UI.ContactSearch = {
             
             const contacts = res.contacts || [];
             
+            // [FIX T1-b / Item 1.9] Semântica de callbacks:
+            // - Digitando (isTyping) com 0 resultados: NÃO dispara callback — evita render
+            //   prematuro da área "Cadastrar Novo Contato" com termo parcial. Apenas
+            //   feedback discreto abaixo do campo.
+            // - Múltiplos resultados (digitação OU busca explícita): NÃO dispara callback(null) —
+            //   apenas o dropdown; a seleção do contato é que dispara o callback definitivo
+            //   (elimina o estado contraditório "não encontrado + lista de resultados").
+            // - Busca explícita (botão/Enter) com 0 resultados: mantém callback(null) —
+            //   o módulo host decide exibir a área de cadastro (comportamento desejado).
+            // - Resultado único (digitação ou explícito): mantém callback(c) — auto-carregamento.
             if (contacts.length === 0) {
                 this.hideDropdown();
-                feedback.innerText = "Nenhum contato encontrado.";
-                feedback.className = "text-xs mt-1 text-rose-500 font-medium";
-                feedback.classList.remove('hidden');
-                this.onResultCallback(null);
+                if (isTyping) {
+                    feedback.innerText = "Nenhum contato encontrado para este termo.";
+                    feedback.className = "text-xs mt-1 text-slate-400 font-medium";
+                    feedback.classList.remove('hidden');
+                } else {
+                    feedback.innerText = "Nenhum contato encontrado.";
+                    feedback.className = "text-xs mt-1 text-rose-500 font-medium";
+                    feedback.classList.remove('hidden');
+                    this.onResultCallback(null);
+                }
             } else if (contacts.length === 1) {
                 this.hideDropdown();
                 const c = contacts[0];
@@ -317,12 +332,10 @@ App.UI.ContactSearch = {
                 feedback.classList.remove('hidden');
                 this.onResultCallback(c);
             } else {
-                // Múltiplos resultados: mostra dropdown
                 feedback.innerText = contacts.length + " contatos encontrados. Selecione um:";
                 feedback.className = "text-xs mt-1 text-slate-500 font-medium";
                 feedback.classList.remove('hidden');
                 this.showDropdown(contacts);
-                this.onResultCallback(null); // Ainda não selecionou ninguém
             }
         } catch(e) {
             if (!isTyping) App.UI.Loader.hide();
@@ -606,7 +619,6 @@ App.UI.ContactForm = {
 
             App.UI.Loader.hide();
 
-            // Pega o primeiro resultado do array
             const contact = res.contacts && res.contacts.length > 0 ? res.contacts[0] : null;
 
             if (contact) {

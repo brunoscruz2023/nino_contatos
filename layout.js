@@ -179,7 +179,16 @@ App.Layout.Shell = {
             document.getElementById('app-title-mobile').innerHTML = "Dashboard <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
             if (typeof App.Dashboard !== 'undefined' && App.Dashboard.UI) App.Dashboard.UI.init();
         }
-        // No caso de 'materiais', não há view própria ainda, cai no Admin. Mas mantemos a lógica.
+        // [BLOCO A — Item 1.2] 'materiais' não possui view própria: redireciona ao Admin
+        // com a aba Materiais pré-selecionada (evita tela preta para perfis Materiais≠000 + Admin=000).
+        else if (view === 'materiais') {
+            document.getElementById('view-admin').classList.remove('hidden');
+            document.getElementById('app-title-mobile').innerHTML = "Estoque <span class='font-normal text-slate-400 text-lg'>(RJ)</span>";
+            if (typeof App.Admin !== 'undefined' && App.Admin.CRUD) {
+                App.Admin.CRUD.state.activeTab = 'materiais';
+                App.Admin.CRUD.init();
+            }
+        }
 
         // Re-renderiza a barra para ocultar o botão ativo e ajustar o FAB
         this.renderNav();
