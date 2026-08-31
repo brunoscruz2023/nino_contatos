@@ -5,44 +5,32 @@ App.Admin = App.Admin || {};
 App.Admin.CRUD = {
     state: {
         dictionaries: null,
-        foundContact: null
+        foundContact: null,
+        activeTab: 'acessos'
     },
 
     init: async function() {
         const view = document.getElementById('view-admin');
         if (!view) return;
 
+        // [FIX T1-a / Item 1.8] Abas condicionais por RBAC:
+        // a aba Acessos exige acesso ao módulo admin; a aba Materiais exige acesso ao módulo materiais.
+        // Perfis com apenas Materiais (ex.: Admin=000, Materiais=002) passam a ver somente a aba Materiais.
+        const hasAdmin = App.Core.Security.hasModuleAccess('admin');
+        const hasMateriais = App.Core.Security.hasModuleAccess('materiais');
+
+        let subtitleText = "Gerencie acessos, contatos e logística da campanha.";
+        if (hasAdmin && !hasMateriais) subtitleText = "Gerencie acessos e contatos da campanha.";
+        else if (!hasAdmin && hasMateriais) subtitleText = "Controle de entrada e distribuição de materiais.";
+
         view.innerHTML = `
             <div class="max-w-4xl mx-auto p-4 md:p-8 w-full">
-                <div class="mb-6">
-                    <h2 class="text-2xl font-bold text-slate-800">Gerenciamento de Acessos</h2>
-                    <p class="text-sm text-slate-500 mt-1">Busque um contato pelo telefone para definir ou editar as permissões de acesso.</p>
+                <div class="mb-4">
+                    <p class="text-sm text-slate-500">${subtitleText}</p>
                 </div>
 
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
-                    <div class="flex flex-col md:flex-row gap-3 items-end">
-                        <div class="flex-1 w-full">
-                            <label class="block text-xs font-bold text-slate-500 mb-1">Telefone do Contato</label>
-                            <input type="tel" id="admin-phone-search" class="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="(21) 99999-9999">
-                        </div>
-                        <button id="admin-btn-search" onclick="App.Admin.CRUD.searchContact()" class="w-full md:w-auto px-6 py-2.5 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-colors">Buscar</button>
-                    </div>
-                </div>
-
-                <!-- BLOCO ISOLADO: GESTÃO DE MATERIAIS -->
-                <div id="admin-materials-section" class="hidden bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-6">
-                    <h3 class="text-lg font-bold text-slate-700 mb-4">Gestão de Materiais</h3>
-                    <div class="flex flex-col md:flex-row gap-2">
-                        <button onclick="App.Admin.CRUD.openMaterialEntryModal()" class="flex-1 px-4 py-2 bg-sky-600 text-white text-xs font-bold rounded-lg hover:bg-sky-700 transition-colors shadow-sm">
-                            + Entrada de Material
-                        </button>
-                        <button onclick="App.Admin.CRUD.openMaterialDistributionModal()" class="flex-1 px-4 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-colors shadow-sm">
-                            + Distribuir Material
-                        </button>
-                    </div>
-                </div>
-
-                <div id="admin-result-area" class="hidden"></div>
+                <div id="admin-tabs"></div>
+                <div id="admin-tab-content"></div>
             </div>
         `;
 
@@ -50,8 +38,82 @@ App.Admin.CRUD = {
             await this.fetchDictionaries();
         }
 
-        if (App.Core.Security.canDistributeMaterial() || App.Core.Security.canManageMaterials()) {
-            document.getElementById('admin-materials-section').classList.remove('hidden');
+        let availableTabs = [];
+        if (hasAdmin) availableTabs.push({ id: 'acessos', label: 'Acessos' });
+        if (hasMateriais) availableTabs.push({ id: 'materiais', label: 'Materiais' });
+
+        // [FIX T1-a / Item 1.8] Guard: se a aba ativa não está disponível para este perfil
+        // (ex.: activeTab='acessos' vindo do default, mas o usuário só tem Materiais),
+        // cai para a primeira aba permitida.
+        if (availableTabs.length === 0 || !availableTabs.find(t => t.id === this.state.activeTab)) {
+            this.state.activeTab = availableTabs.length > 0 ? availableTabs[0].id : null;
+        }
+
+        const handleTabChange = (tabId) => {
+            this.state.activeTab = tabId;
+            App.UI.TabNav.render('#admin-tabs', availableTabs, this.state.activeTab, handleTabChange);
+            this.renderTabContent();
+        };
+
+        App.UI.TabNav.render('#admin-tabs', availableTabs, this.state.activeTab, handleTabChange);
+
+        this.renderTabContent();
+    },
+
+    renderTabContent: function() {
+        const content = document.getElementById('admin-tab-content');
+        if (!content) return;
+
+        if (this.state.activeTab === 'acessos') {
+            content.innerHTML = `
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 mt-4">
+                    <div id="admin-search-container"></div>
+                </div>
+                <div id="admin-result-area" class="hidden"></div>
+            `;
+            
+            // Inicializa o componente de busca reutilizável
+            App.UI.ContactSearch.init('#admin-search-container', {
+                onResult: (contact) => {
+                    const resultArea = document.getElementById('admin-result-area');
+                    resultArea.classList.remove('hidden');
+                    
+                    if (contact) {
+                        this.state.foundContact = contact;
+                        this.renderAccessForm(contact);
+                    } else {
+                        this.state.foundContact = null;
+                        const term = App.UI.ContactSearch.getInputValue();
+                        const isPhone = /^\d+$/.test(term.replace(/\s|\(|\)|-/g, ''));
+                        const formattedPhone = isPhone ? App.Core.Utils.formatPhone(term) : "";
+                        
+                        resultArea.innerHTML = `
+                            <div class="bg-sky-50 border border-sky-200 p-6 rounded-2xl text-center">
+                                <p class="text-sm text-sky-700 font-medium mb-4">Nenhum contato encontrado com este termo.</p>
+                                ${formattedPhone ? `<button onclick="App.Admin.CRUD.openCreateContactModal('${formattedPhone}')" class="px-6 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">Cadastrar Novo Contato</button>` : '<p class="text-xs text-slate-400">Busque por telefone para cadastrar um novo contato.</p>'}
+                            </div>
+                        `;
+                    }
+                }
+            });
+        } else if (this.state.activeTab === 'materiais') {
+            content.innerHTML = `
+                <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200 mt-4 flex flex-col md:flex-row gap-4">
+                    <button onclick="App.Admin.CRUD.openMaterialEntryModal()" class="flex-1 px-4 py-3 bg-sky-600 text-white text-sm font-bold rounded-lg hover:bg-sky-700 transition-colors shadow-sm flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        Entrada de Material
+                    </button>
+                    <button onclick="App.Admin.CRUD.openMaterialDistributionModal()" class="flex-1 px-4 py-3 bg-amber-500 text-white text-sm font-bold rounded-lg hover:bg-amber-600 transition-colors shadow-sm flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                        Distribuir Material
+                    </button>
+                </div>
+            `;
+        } else {
+            // [FIX T1-a / Item 1.8] Caminho defensivo: perfil sem acesso a nenhuma aba do painel.
+            // Não deve ocorrer pelo fluxo normal de navegação (Layout só roteia com acesso),
+            // mas protege contra acessos diretos ou mudanças de permissão em sessão ativa.
+            content.innerHTML = `<div class="text-center text-slate-400 py-10 text-sm">Sem permissão de acesso a este painel.</div>`;
         }
     },
 
@@ -68,47 +130,6 @@ App.Admin.CRUD = {
         } catch (err) {
             console.error(err);
             alert("Erro ao carregar dicionários de acesso. Verifique o console.");
-        }
-    },
-
-    searchContact: async function() {
-        const phoneInput = document.getElementById('admin-phone-search').value;
-        const formattedPhone = App.Core.Utils.formatPhone(phoneInput);
-        const resultArea = document.getElementById('admin-result-area');
-        if (!formattedPhone) return;
-
-        resultArea.classList.remove('hidden');
-        resultArea.innerHTML = ''; 
-        App.UI.Loader.show();
-
-        const payload = { action: 'lookupContactByPhone', phone: formattedPhone };
-        try {
-            const res = await new Promise((resolve, reject) => {
-                App.Core.API.postEvent(payload, function(data) {
-                    if (data.status === 'success') resolve(data);
-                    else reject(data.message || 'Erro na busca.');
-                });
-            });
-
-            App.UI.Loader.hide();
-
-            if (res.contact) {
-                this.state.foundContact = res.contact;
-                this.renderAccessForm(res.contact);
-            } else {
-                this.state.foundContact = null;
-                resultArea.innerHTML = `
-                    <div class="bg-sky-50 border border-sky-200 p-6 rounded-2xl text-center">
-                        <p class="text-sm text-sky-700 font-medium mb-4">Nenhum contato encontrado com este telefone.</p>
-                        <button onclick="App.Admin.CRUD.openCreateContactModal('${formattedPhone}')" class="px-6 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">
-                            Cadastrar Novo Contato
-                        </button>
-                    </div>
-                `;
-            }
-        } catch (err) {
-            App.UI.Loader.hide();
-            resultArea.innerHTML = `<div class="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-600 font-medium text-sm">Erro: ${err}</div>`;
         }
     },
 
@@ -343,7 +364,6 @@ App.Admin.CRUD = {
     // MÓDULO DE MATERIAIS (UI)
     // ==========================================
     
-    // NOVO: Calcula saldos em memória para exibir no dropdown de distribuição
     getStockBalances: function() {
         let balances = {};
         if (typeof materialsDatabase === 'undefined' || !materialsDatabase) return balances;
@@ -366,13 +386,14 @@ App.Admin.CRUD = {
     },
 
     openMaterialEntryModal: function() {
-        // Popula o select de itens a partir do dicionário
         let itemsOptions = '<option value="">Selecione um item...</option>';
         if (window.dictsGlobal && window.dictsGlobal.materiais_itens) {
             window.dictsGlobal.materiais_itens.forEach(i => {
                 itemsOptions += `<option value="${i.nome}">${i.nome}</option>`;
             });
         }
+        
+        let today = new Date().toISOString().split('T')[0];
 
         App.Core.UI.Modal.open({
             title: "Entrada de Material",
@@ -393,6 +414,10 @@ App.Admin.CRUD = {
                         <label class="block text-xs font-bold text-slate-500 mb-1">Origem / Fornecedor</label>
                         <input type="text" id="mat-origem" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Gráfica Central">
                     </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Data da Entrada</label>
+                        <input type="date" id="mat-data" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" value="${today}">
+                    </div>
                 </div>
             `,
             actions: [
@@ -402,6 +427,7 @@ App.Admin.CRUD = {
                         const item = document.getElementById('mat-item').value;
                         const quantidade = document.getElementById('mat-quantidade').value.trim();
                         const origem = document.getElementById('mat-origem').value.trim();
+                        const dataMov = document.getElementById('mat-data').value;
 
                         if (!item || !quantidade) { alert("Item e Quantidade são obrigatórios."); return; }
 
@@ -414,7 +440,8 @@ App.Admin.CRUD = {
                             idOrigemDestino: origem,
                             idResponsavel: App.Core.Security.getUserId(),
                             refId: "",
-                            status: "Concluído"
+                            status: "Concluído",
+                            dataMov: dataMov
                         };
 
                         App.Core.API.postEvent(payload, function(res) {
@@ -431,14 +458,12 @@ App.Admin.CRUD = {
     },
 
     openMaterialDistributionModal: function() {
-        // Calcula saldos e popula o select com itens disponíveis
         let balances = App.Admin.CRUD.getStockBalances();
         let itemsOptions = '<option value="">Selecione um item...</option>';
         
         if (window.dictsGlobal && window.dictsGlobal.materiais_itens) {
             window.dictsGlobal.materiais_itens.forEach(i => {
                 let balance = balances[i.nome] || 0;
-                // Só permite selecionar itens com saldo positivo
                 if (balance > 0) {
                     itemsOptions += `<option value="${i.nome}">${i.nome} (Disp: ${balance})</option>`;
                 }
@@ -448,6 +473,10 @@ App.Admin.CRUD = {
         if (itemsOptions === '<option value="">Selecione um item...</option>') {
             itemsOptions = '<option value="" disabled>Sem itens em estoque</option>';
         }
+        
+        let today = new Date().toISOString().split('T')[0];
+        
+        let receptorId = null;
 
         App.Core.UI.Modal.open({
             title: "Distribuir Material",
@@ -455,9 +484,8 @@ App.Admin.CRUD = {
             body: `
                 <div class="space-y-3">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 mb-1">Telefone do Mobilizador</label>
-                        <input type="tel" id="mat-dist-phone" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="(21) 99999-9999" oninput="App.Admin.CRUD.handleMatDistPhoneInput(this.value)" onblur="App.Admin.CRUD.lookupMatDistResp()">
-                        <p id="mat-dist-name" class="text-xs mt-1 font-medium"></p>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Mobilizador (Nome ou Telefone)</label>
+                        <div id="mat-dist-search-container"></div>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-1">Item</label>
@@ -469,6 +497,10 @@ App.Admin.CRUD = {
                         <label class="block text-xs font-bold text-slate-500 mb-1">Quantidade</label>
                         <input type="number" id="mat-dist-quantidade" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: 500">
                     </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Data da Distribuição</label>
+                        <input type="date" id="mat-dist-data" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" value="${today}">
+                    </div>
                 </div>
             `,
             actions: [
@@ -476,87 +508,54 @@ App.Admin.CRUD = {
                     id: 'btn-dist-mat',
                     text: "Distribuir",
                     onClick: async function() {
-                        const phone = document.getElementById('mat-dist-phone').value;
                         const item = document.getElementById('mat-dist-item').value;
                         const quantidade = parseInt(document.getElementById('mat-dist-quantidade').value);
+                        const dataMov = document.getElementById('mat-dist-data').value;
                         
-                        if (!phone || !item || !quantidade) { alert("Preencha todos os campos."); return; }
+                        if (!receptorId || !item || !quantidade) { alert("Preencha todos os campos."); return; }
                         
                         App.UI.Loader.show();
-                        const formattedPhone = App.Core.Utils.formatPhone(phone);
-                        const lookupPayload = { action: 'lookupContactByPhone', phone: formattedPhone };
-                        try {
-                            const lookupRes = await new Promise((resolve, reject) => {
-                                App.Core.API.postEvent(lookupPayload, function(data) {
-                                    if (data.status === 'success') resolve(data);
-                                    else reject('Erro');
-                                });
-                            });
-                            
-                            if (!lookupRes.contact) { App.UI.Loader.hide(); alert("Mobilizador não encontrado."); return; }
-                            
-                            const balance = balances[item] || 0;
-                            if (quantidade > balance) { App.UI.Loader.hide(); alert("Saldo insuficiente. Disponível: " + balance + " " + item); return; }
-                            
-                            const payload = {
-                                action: 'distributeMaterial',
-                                item: item,
-                                quantidade: quantidade,
-                                idReceptor: lookupRes.contact.id,
-                                idResponsavel: App.Core.Security.getUserId()
-                            };
-                            
-                            App.Core.API.postEvent(payload, function(res) {
-                                App.UI.Loader.hide();
-                                if (res.status === 'success') { App.UI.SuccessToast.show(1500); App.Core.UI.Modal.close(); } 
-                                else { alert("Erro: " + res.message); }
-                            });
-                            
-                        } catch(e) { App.UI.Loader.hide(); alert("Erro ao processar."); }
+                        
+                        const balance = balances[item] || 0;
+                        if (quantidade > balance) { App.UI.Loader.hide(); alert("Saldo insuficiente. Disponível: " + balance + " " + item); return; }
+                        
+                        const payload = {
+                            action: 'distributeMaterial',
+                            item: item,
+                            quantidade: quantidade,
+                            idReceptor: receptorId,
+                            idResponsavel: App.Core.Security.getUserId(),
+                            dataMov: dataMov
+                        };
+                        
+                        App.Core.API.postEvent(payload, function(res) {
+                            App.UI.Loader.hide();
+                            if (res.status === 'success') { App.UI.SuccessToast.show(1500); App.Core.UI.Modal.close(); } 
+                            else { alert("Erro: " + res.message); }
+                        });
                     },
                     className: "w-full bg-amber-500 text-white py-2.5 rounded-xl font-bold hover:bg-amber-600 transition-all mb-2 opacity-50 cursor-not-allowed pointer-events-none"
                 },
                 { text: "Cancelar", onClick: App.Core.UI.Modal.close, className: "w-full bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all" }
             ]
         });
-    },
-
-    handleMatDistPhoneInput: function(value) {
-        const btnDist = document.getElementById('btn-dist-mat');
-        const nameEl = document.getElementById('mat-dist-name');
-        if (!value) {
-            if(btnDist) { btnDist.disabled = true; btnDist.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
-            nameEl.innerText = "";
-        }
-    },
-
-    lookupMatDistResp: function() {
-        const phone = document.getElementById('mat-dist-phone').value;
-        const nameEl = document.getElementById('mat-dist-name');
-        const btnDist = document.getElementById('btn-dist-mat');
-        if (!phone) {
-            if(btnDist) { btnDist.disabled = true; btnDist.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
-            nameEl.innerText = "";
-            return;
-        }
-        nameEl.innerText = "Buscando...";
-        nameEl.className = "text-xs mt-1 text-slate-500 animate-pulse";
-        const formattedPhone = App.Core.Utils.formatPhone(phone);
-        App.Core.API.postEvent({ action: 'lookupContactByPhone', phone: formattedPhone }, function(res) {
-            if (res.status === 'success' && res.contact) {
-                nameEl.innerText = "Mobilizador: " + res.contact.nome;
-                nameEl.className = "text-xs mt-1 text-emerald-600 font-medium";
-                if(btnDist) { btnDist.disabled = false; btnDist.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
-            } else {
-                nameEl.innerText = "Mobilizador não encontrado.";
-                nameEl.className = "text-xs mt-1 text-rose-500 font-medium";
-                if(btnDist) { btnDist.disabled = true; btnDist.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
+        
+        // Inicializa a busca dentro do modal de distribuição
+        App.UI.ContactSearch.init('#mat-dist-search-container', {
+            onResult: (contact) => {
+                const btnDist = document.getElementById('btn-dist-mat');
+                if (contact) {
+                    receptorId = contact.id;
+                    if(btnDist) { btnDist.disabled = false; btnDist.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
+                } else {
+                    receptorId = null;
+                    if(btnDist) { btnDist.disabled = true; btnDist.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
+                }
             }
         });
     },
 
     getMaterialBalance: async function(item) {
-        // Mantida para compatibilidade, mas a lógica principal agora usa getStockBalances
         const balances = App.Admin.CRUD.getStockBalances();
         return balances[item] || 0;
     }

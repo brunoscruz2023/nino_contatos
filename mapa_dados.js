@@ -76,7 +76,10 @@ App.Mapa.Dados = {
             let isCard = mapLvl === '003';
             let isZap = mapLvl === '002';
 
-            let queryCols = "A, B, E, F, G"; 
+            // [BLOCO A — Item 1.7 / Opção B] Nível 001 consulta SEM a coluna B (Nome):
+            // os nomes nunca chegam ao dispositivo. A arquitetura de performance é preservada
+            // (1 query por sessão + cache local) com payload ainda menor para este nível.
+            let queryCols = "A, E, F, G";
             if (isTotal || isCard) queryCols = "A, B, C, D, E, F, G"; 
             else if (isZap) queryCols = "A, B, C, E, F, G"; 
             
@@ -126,7 +129,12 @@ App.Mapa.Dados = {
             let valorBairro = row.c[0].v;
             if (typeof valorBairro !== 'string') return; 
             
-            let nomeContato = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "Não informado";
+            // [BLOCO A — Item 1.7 / Opção B] Nível 001 não recebe a coluna B: nome permanece vazio
+            // (as contagens por bairro continuam funcionando normalmente).
+            let nomeContato = "";
+            if (isTotal || isCard || isZap) {
+                nomeContato = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim() : "Não informado";
+            }
             
             let fone = "";
             let ref = "";
@@ -147,9 +155,11 @@ App.Mapa.Dados = {
                 rawEquipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : ""; idx++;
                 data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
             } else {
-                funcao = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : "NÃO DEFINIDA"; idx++;
-                rawEquipe = row.c[idx] && row.c[idx].v ? row.c[idx].v.toString().trim().toUpperCase() : ""; idx++;
-                data = row.c[idx] && row.c[idx].v ? row.c[idx].v : ""; idx++;
+                // [BLOCO A — Item 1.7 / Opção B] Query do nível 001 = "A, E, F, G"
+                // Índices deslocados (sem B e sem C): c[1]=Função, c[2]=Equipe, c[3]=Data
+                funcao = row.c[1] && row.c[1].v ? row.c[1].v.toString().trim().toUpperCase() : "NÃO DEFINIDA";
+                rawEquipe = row.c[2] && row.c[2].v ? row.c[2].v.toString().trim().toUpperCase() : "";
+                data = row.c[3] && row.c[3].v ? row.c[3].v : "";
             }
             
             // Quebra a string de equipes em um array

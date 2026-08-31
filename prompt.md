@@ -19,3 +19,4 @@ Stack: Vanilla JS, HTML, Tailwind CSS (CDN), Google Sheets (Banco de Dados), Goo
 Leitura de Dados: API nativa do Google Sheets (gviz/tq) com callback JSONP.
 Escrita de Dados: fetch (POST) para Web App do Apps Script (Content-Type: text/plain;charset=utf-8 para bypass CORS).
 Integridade: Uso de txt() no backend para forçar texto, e cleanStr() no frontend para limpar leitura.
+5. Quando não tiver certeza de possuir a última versão de algum dos arquivos necessários, assim como quando estiver iniciando um novo chat e precisar conhecer o sistema, solicite todos os arquivos necessários de uma forma lógica, um a um, para que possa entender toda a lógica, estrutura e a partid daí poder apresentar respostas acertivas e codificações profissionais.

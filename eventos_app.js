@@ -43,6 +43,9 @@ function initEventos() {
 
 function navigate(delta) {
     if (currentViewMode === 'month') {
+        // [BLOCO A — Item 1.4] Fixa o dia em 1 antes do setMonth para evitar o salto de mês
+        // (ex.: 31/jan + setMonth(+1) resultaria em 03/mar, pulando fevereiro).
+        currentCalendarDate.setDate(1);
         currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
     } else if (currentViewMode === 'week') {
         activeWeekStartDate.setDate(activeWeekStartDate.getDate() + (delta * 7));

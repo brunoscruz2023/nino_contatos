@@ -28,7 +28,7 @@ function doPost(e) {
     else if (action === 'deactivateQRToken') response = deactivateQRToken(data);
     else if (action === 'validateKioskAccess') response = validateKioskAccess(data);
     else if (action === 'authorizeKioskMobilizer') response = authorizeKioskMobilizer(data);
-    else if (action === 'lookupContactByPhone') response = lookupContactByPhone(data);
+    else if (action === 'lookupContact') response = lookupContact(data); 
     else if (action === 'performLogin') response = performLogin(data); 
     else if (action === 'loginUser') response = loginUser(data); 
     else if (action === 'getDictionaries') response = getDictionaries(); 
@@ -65,7 +65,6 @@ function generateHash(senha) {
   return txtHash;
 }
 
-// Parser Dinâmico: Monta o objeto baseado na quantidade de módulos, FORÇANDO MINÚSCULAS
 function parseCodigoAcesso(codigo, modulos) {
   var parsed = {};
   if (!codigo || !modulos) return parsed;
@@ -73,14 +72,12 @@ function parseCodigoAcesso(codigo, modulos) {
   
   modulos.forEach(function(mod, index) {
     var start = index * 3;
-    // Força a chave para minúsculas para compatibilidade com os módulos antigos
     var key = mod.nome.toString().toLowerCase();
     parsed[key] = codigo.substring(start, start + 3) || "000";
   });
   return parsed;
 }
 
-// Função Utilitária Reutilizável de Auto-Correção de Schema (On-the-fly)
 function normalizeAccessCode(userId, currentCode, expectedLength) {
   if (!currentCode) currentCode = "";
   currentCode = currentCode.toString().replace(/'/g, "").trim();
@@ -92,7 +89,6 @@ function normalizeAccessCode(userId, currentCode, expectedLength) {
     }
     var newCode = currentCode + padding;
     
-    // Tenta salvar na base de contatos se for um usuário com ID real (não LEGADO)
     if (userId && userId !== 'LEGADO') {
       try {
         var ss = SpreadsheetApp.openById(CONTATOS_SHEET_ID);
@@ -100,13 +96,11 @@ function normalizeAccessCode(userId, currentCode, expectedLength) {
         var rows = sheet.getDataRange().getValues();
         for (var i = 1; i < rows.length; i++) {
           if (rows[i][25] && rows[i][25].toString().replace(/'/g, "").trim().toUpperCase() == userId.toString().toUpperCase()) {
-            sheet.getRange(i + 1, 28).setValue(txt(newCode)); // Coluna AB
+            sheet.getRange(i + 1, 28).setValue(txt(newCode)); 
             break;
           }
         }
-      } catch(e) {
-        // Ignora erro de salvamento para não bloquear o login
-      }
+      } catch(e) { }
     }
     return newCode;
   }
@@ -141,9 +135,8 @@ function performLogin(data) {
   for (var i = 1; i < dataRows.length; i++) {
     if (dataRows[i][0] && dataRows[i][0].toString().trim() === key) {
       var eqCodigos = dataRows[i][1] ? dataRows[i][1].toString().trim() : "";
-      var codigoAcessoStr = dataRows[i][4] ? dataRows[i][4].toString().trim() : ""; // Lê o Codigo_Novo
+      var codigoAcessoStr = dataRows[i][4] ? dataRows[i][4].toString().trim() : ""; 
       
-      // AUTO-CORREÇÃO DE SCHEMA (On-the-fly)
       var normalizedCode = normalizeAccessCode(key, codigoAcessoStr, expectedLen);
       var parsedFuncoes = parseCodigoAcesso(normalizedCode, dicts.modulos);
       
@@ -165,7 +158,7 @@ function performLogin(data) {
           key: key, id: 'LEGADO', nome: 'Usuário ' + key, teams: teamsArray, 
           nivel: legado.nivel, modulos: legado.modulos, 
           funcoes: parsedFuncoes,
-          mustChangePassword: false // Logins por chave não usam senha
+          mustChangePassword: false 
         }
       };
     }
@@ -187,19 +180,17 @@ function loginUser(data) {
     if (rowPhone === phoneTried) {
       var storedHash = rows[i][26] ? rows[i][26].toString().trim() : ""; 
       var rawCodigoAcesso = rows[i][27] ? rows[i][27].toString().trim() : ""; 
-      var idContato = rows[i][25] ? rows[i][25].toString().trim().toUpperCase() : ""; 
+      var idContato = rows[i][25] ? rows[i][25].toString().replace(/'/g, "").trim().toUpperCase() : ""; 
       var equipeNomesStr = rows[i][5] ? rows[i][5].toString().trim() : "";
       
       if (storedHash === "") return { status: 'error', message: 'Usuário sem acesso ao sistema.' };
       if (storedHash === hashTried) {
-        // AUTO-CORREÇÃO DE SCHEMA
         var normalizedCode = normalizeAccessCode(idContato, rawCodigoAcesso, expectedLen);
         var parsedFuncoes = parseCodigoAcesso(normalizedCode, dicts.modulos);
         
         var legado = gerarLegadoDeFuncoes(parsedFuncoes);
         var teamsArray = equipeNomesStr ? equipeNomesStr.split(',').map(function(t) { return t.trim().toUpperCase(); }).filter(function(t) { return t.length > 0; }) : ["TODAS"];
         
-        // VERIFICAÇÃO DE SENHA PADRÃO (123456)
         var isDefaultPass = (hashTried === generateHash("123456"));
         
         return { 
@@ -208,7 +199,7 @@ function loginUser(data) {
             id: idContato, key: 'logado', nome: rows[i][1], teams: teamsArray, 
             nivel: legado.nivel, modulos: legado.modulos, 
             funcoes: parsedFuncoes,
-            mustChangePassword: isDefaultPass // Flag para forçar troca de senha
+            mustChangePassword: isDefaultPass 
           }
         };
       } else {
@@ -219,13 +210,10 @@ function loginUser(data) {
   return { status: 'error', message: 'Telefone não encontrado na base.' };
 }
 
-// NOVA FUNÇÃO: Alteração de Senha
 function changePassword(data) {
   if (!data.userId || !data.newSenha || data.newSenha.length !== 6) {
     return { status: 'error', message: 'Dados inválidos para troca de senha.' };
   }
-  
-  // VALIDAÇÃO DE SEGURANÇA: Impede o uso da senha padrão na troca
   if (data.newSenha === "123456") {
     return { status: 'error', message: 'A nova senha não pode ser igual à senha padrão (123456).' };
   }
@@ -235,13 +223,13 @@ function changePassword(data) {
   if (!sheet) return { status: 'error', message: 'Aba não encontrada.' };
   
   var dataRows = sheet.getDataRange().getValues();
-  var targetId = data.userId.toString().trim().toUpperCase();
+  var targetId = data.userId.toString().replace(/'/g, "").trim().toUpperCase();
   
   for (var i = 1; i < dataRows.length; i++) {
     var rowId = dataRows[i][25] ? dataRows[i][25].toString().replace(/'/g, "").trim().toUpperCase() : "";
     if (rowId === targetId) {
       var newHash = generateHash(data.newSenha);
-      sheet.getRange(i + 1, 27).setValue(txt(newHash)); // Coluna AA (Senha_Hash)
+      sheet.getRange(i + 1, 27).setValue(txt(newHash)); 
       registrarLogAtuacao({ userId: data.userId, acao: 'CHANGE_PASS', refId: '', lat: '', lng: '', status: 'OK' });
       return { status: 'success', message: 'Senha atualizada com sucesso!' };
     }
@@ -251,7 +239,7 @@ function changePassword(data) {
 
 function getDictionaries() {
   var cache = CacheService.getScriptCache();
-  var cached = cache.get('dicts_acessos_v9');
+  var cached = cache.get('dicts_acessos_v10');
   if (cached) return JSON.parse(cached);
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -291,9 +279,10 @@ function getDictionaries() {
     niveis: extract(ss.getSheetByName('Niveis')),
     modulos: extract(ss.getSheetByName('Modulos')),
     funcoes_modulos: extractFuncoesModulos(ss.getSheetByName('Funcoes_Modulos')),
-    funcoes_contato: extract(ss.getSheetByName('Funcoes'))
+    funcoes_contato: extract(ss.getSheetByName('Funcoes')),
+    materiais_itens: extract(ss.getSheetByName('Materiais_Itens'))
   };
-  cache.put('dicts_acessos_v9', JSON.stringify(result), 21600);
+  cache.put('dicts_acessos_v10', JSON.stringify(result), 21600);
   return result;
 }
 
@@ -302,7 +291,7 @@ function saveUserAccess(data) {
   var sheet = ss.getSheetByName(CONTATOS_SHEET_NAME);
   if (!sheet) return { status: 'error', message: 'Aba não encontrada.' };
   var rows = sheet.getDataRange().getValues();
-  var targetId = data.userId ? data.userId.toString().trim().toUpperCase() : "";
+  var targetId = data.userId ? data.userId.toString().replace(/'/g, "").trim().toUpperCase() : "";
   var newCodigo = data.codigoAcesso;
   var equipesCodigosStr = data.equipes || "";
   
@@ -318,11 +307,10 @@ function saveUserAccess(data) {
   var equipesNomesStr = equipesNomesArr.join(', ');
   
   for (var i = 1; i < rows.length; i++) {
-    var rowId = rows[i][25] ? rows[i][25].toString().trim().toUpperCase() : "";
+    var rowId = rows[i][25] ? rows[i][25].toString().replace(/'/g, "").trim().toUpperCase() : "";
     if (rowId === targetId) { 
       sheet.getRange(i + 1, 28).setValue(txt(newCodigo)); 
       sheet.getRange(i + 1, 6).setValue(equipesNomesStr);
-      // Permite 123456 aqui para o Admin
       if (data.senha && data.senha.toString().trim() !== "") sheet.getRange(i + 1, 27).setValue(txt(generateHash(data.senha))); 
       return { status: 'success', message: 'Acesso atualizado com sucesso!' };
     }
@@ -479,9 +467,11 @@ function registerMaterialTransaction(data) {
     });
   }
   var newId = "MAT-" + (maxIdNum + 1).toString().padStart(4, '0');
+  
+  var movDate = data.dataMov ? new Date(data.dataMov) : new Date();
 
   sheet.appendRow([
-    new Date(), txt(newId), txt(data.tipoMov || "ENTRADA"), txt(data.item || ""), parseInt(data.quantidade || 0), 
+    movDate, txt(newId), txt(data.tipoMov || "ENTRADA"), txt(data.item || ""), parseInt(data.quantidade || 0), 
     txt(data.idOrigemDestino || ""), txt(data.idResponsavel || ""), txt(data.refId || ""), txt(data.status || "Concluído")
   ]);
 
@@ -505,9 +495,11 @@ function distributeMaterial(data) {
     });
   }
   var newId = "MAT-" + (maxIdNum + 1).toString().padStart(4, '0');
+  
+  var movDate = data.dataMov ? new Date(data.dataMov) : new Date();
 
   sheet.appendRow([
-    new Date(), txt(newId), "DISTRIBUICAO", txt(data.item || ""), parseInt(data.quantidade || 0), 
+    movDate, txt(newId), "DISTRIBUICAO", txt(data.item || ""), parseInt(data.quantidade || 0), 
     txt(data.idReceptor || ""), txt(data.idResponsavel || ""), txt(data.refId || ""), "Pendente_Recebimento"
   ]);
 
@@ -588,38 +580,50 @@ function updateContact(data) {
   return updated ? { status: 'success', message: 'Contato atualizado!' } : { status: 'error', message: 'Contato não encontrado.' };
 }
 
-function lookupContactByPhone(data) {
+// Unificação de Busca (Nome ou Telefone) - Retorna Array de Contatos
+function lookupContact(data) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Base_Contatos');
   if (!sheet) return { status: 'error', message: 'Aba Base_Contatos não encontrada.' };
   var dataRows = sheet.getDataRange().getValues();
-  var formattedInput = formatPhoneBackend(data.phone);
   var dicts = getDictionaries();
   var expectedLen = dicts.modulos.length * 3;
   
+  var term = data.term ? data.term.toString().trim() : "";
+  var type = data.type || 'phone';
+  var results = [];
+  
   for (var i = 1; i < dataRows.length; i++) {
-    if (formatPhoneBackend(dataRows[i][2]) === formattedInput) {
+    var match = false;
+    if (type === 'phone') {
+      var formattedInput = formatPhoneBackend(term);
+      if (formatPhoneBackend(dataRows[i][2]) === formattedInput) match = true;
+    } else {
+      var rowName = dataRows[i][1] ? dataRows[i][1].toString().trim().toUpperCase() : "";
+      if (rowName.includes(term.toUpperCase())) match = true;
+    }
+    
+    if (match) {
       var rawId = dataRows[i][25] ? dataRows[i][25].toString().replace(/'/g, "").trim().toUpperCase() : "";
       var rawCodigo = dataRows[i][27] ? dataRows[i][27].toString().replace(/'/g, "").trim() : "";
-      
-      // AUTO-CORREÇÃO
       var normCodigo = normalizeAccessCode(rawId, rawCodigo, expectedLen);
       
-      return { 
-        status: 'success', 
-        contact: {
-          id: rawId, 
-          nome: dataRows[i][1] ? dataRows[i][1].toString().trim() : "", 
-          bairro: dataRows[i][0] ? dataRows[i][0].toString().trim() : "", 
-          ref: dataRows[i][3] ? dataRows[i][3].toString().trim() : "", 
-          equipe: dataRows[i][5] ? dataRows[i][5].toString().trim() : "",
-          funcao: dataRows[i][4] ? dataRows[i][4].toString().trim() : "",
-          codigoAcesso: normCodigo, 
-          hasSenha: dataRows[i][26] ? dataRows[i][26].toString().trim() !== "" : false
-        }
-      };
+      results.push({
+        id: rawId, 
+        nome: dataRows[i][1] ? dataRows[i][1].toString().trim() : "", 
+        telefone: dataRows[i][2] ? dataRows[i][2].toString().trim() : "", // CORREÇÃO: Adicionado campo telefone
+        bairro: dataRows[i][0] ? dataRows[i][0].toString().trim() : "", 
+        ref: dataRows[i][3] ? dataRows[i][3].toString().trim() : "", 
+        equipe: dataRows[i][5] ? dataRows[i][5].toString().trim() : "",
+        funcao: dataRows[i][4] ? dataRows[i][4].toString().trim() : "",
+        codigoAcesso: normCodigo, 
+        hasSenha: dataRows[i][26] ? dataRows[i][26].toString().trim() !== "" : false
+      });
+      
+      // Limita a 10 resultados para não sobrecarregar a UI
+      if (results.length >= 10) break;
     }
   }
-  return { status: 'success', contact: null }; 
+  return { status: 'success', contacts: results }; 
 }
 
 // ==========================================

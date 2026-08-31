@@ -15,6 +15,14 @@ App.Eventos.Kiosk = {
         this.kioskState.eventId = eventId;
         this.kioskState.token = token;
 
+        // [BLOCO A — Item 1.3] Pré-carga de bairros e dicionários em paralelo à validação do token.
+        // O modo quiosque pula o initApp, logo em dispositivos sem cache o formulário de
+        // participantes abria sem sugestões de bairro, equipes e funções.
+        // O carregamento é disparado sem await: o gate de validação do QR Code permanece imediato.
+        App.Mapa.Dados.loadBairrosFromCache();      // síncrono: restaura cache local se existir
+        App.Mapa.Dados.fetchBairrosFromNetwork();   // async: popula geoDicionario em background
+        this.loadKioskDictionaries();               // async: popula window.dictsGlobal em background
+
         const statusEl = document.getElementById('kiosk-status');
         const wrapperEl = document.getElementById('kiosk-form-wrapper');
         
@@ -47,6 +55,23 @@ App.Eventos.Kiosk = {
             statusEl.className = "p-4 text-center text-rose-500 text-sm font-bold";
             document.getElementById('kiosk-event-name').innerText = "Erro de Acesso";
         }
+    },
+
+    // [BLOCO A — Item 1.3] Carrega dicionários (equipes, funções, etc.) no modo quiosque.
+    // Fallback imediato do cache local + busca fresca em background.
+    loadKioskDictionaries: function() {
+        if (!window.dictsGlobal) {
+            const cachedDicts = localStorage.getItem('dicts_global_cache');
+            if (cachedDicts) {
+                try { window.dictsGlobal = JSON.parse(cachedDicts); } catch(e) {}
+            }
+        }
+        App.Core.API.postEvent({ action: 'getDictionaries' }, function(res) {
+            if (res.status === 'success') {
+                window.dictsGlobal = res;
+                try { localStorage.setItem('dicts_global_cache', JSON.stringify(res)); } catch(e) {}
+            }
+        });
     },
 
     showMobilizerLogin: function() {
@@ -149,9 +174,17 @@ App.Eventos.Kiosk = {
             </div>
         `;
 
+        // [BLOCO A — Item 1.3] Popula o dropdown de Função com o dicionário carregado
+        // (antes o parâmetro era omitido e o select ficava vazio).
+        let funcoesArray = [];
+        if (window.dictsGlobal && window.dictsGlobal.funcoes_contato) {
+            funcoesArray = window.dictsGlobal.funcoes_contato.map(f => f.nome);
+        }
+
         App.UI.ContactForm.init('#kiosk-presence-container', {
             canEdit: true,
             saveButtonText: "Registrar Presença",
+            funcoes: funcoesArray,
             onCancel: function() {
                 // No kiosk, cancelar limpa o formulário para o próximo participante, não fecha o quiosque
                 App.UI.ContactForm.clear();
