@@ -58,17 +58,23 @@ App.Eventos.CRUD = (function() {
 
     // ==========================================
     // MODAL DE CRIAÇÃO DE TAREFA AVULSA
+    // [E2/S2] Busca por Nome ou Telefone via App.UI.ContactSearch.
+    // Substitui o input de telefone + lookupContactByPhone (action inexistente no backend,
+    // item 1.1) — o ID do responsável agora é resolvido pela própria busca, eliminando
+    // o segundo POST e o contrato quebrado. Padrão idêntico ao Admin e a Distribuir Material.
     // ==========================================
     function openCreateTaskModal() {
         const today = new Date().toLocaleDateString('pt-BR');
+        let taskRespId = null;
+
         App.Core.UI.Modal.open({
             title: "Nova Tarefa Avulsa",
             subtitle: "Atribua uma micro-tarefa a um mobilizador",
             body: `
                 <div class="space-y-3">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 mb-1">Telefone do Responsável</label>
-                        <input type="tel" id="task-resp-phone" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="(21) 99999-9999" onblur="App.Eventos.CRUD.lookupTaskResp()">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Responsável (Nome ou Telefone)</label>
+                        <div id="task-resp-search-container"></div>
                         <p id="task-resp-name" class="text-xs mt-1 font-medium"></p>
                     </div>
                     <div>
@@ -90,58 +96,37 @@ App.Eventos.CRUD = (function() {
                     id: 'btn-create-task',
                     text: "Criar Tarefa",
                     onClick: async function() {
-                        const phone = document.getElementById('task-resp-phone').value;
                         const titulo = document.getElementById('task-titulo').value.trim();
                         const desc = document.getElementById('task-desc').value.trim();
                         const dataLimite = document.getElementById('task-data').value.trim();
 
-                        if (!phone || !titulo) {
-                            alert("Telefone e Título são obrigatórios.");
+                        if (!taskRespId || !titulo) {
+                            alert("Selecione o responsável pela busca e informe o título.");
                             return;
                         }
 
                         App.UI.Loader.show();
-                        const formattedPhone = App.Core.Utils.formatPhone(phone);
-                        const lookupPayload = { action: 'lookupContactByPhone', phone: formattedPhone };
-                        
-                        try {
-                            const lookupRes = await new Promise((resolve, reject) => {
-                                App.Core.API.postEvent(lookupPayload, function(data) {
-                                    if (data.status === 'success') resolve(data);
-                                    else reject('Erro na busca');
-                                });
-                            });
+                        // [E2/S2] O ID já veio resolvido da busca — criação direta no backend
+                        const payload = {
+                            action: 'createTask',
+                            userId: taskRespId,
+                            titulo: titulo,
+                            descricao: desc,
+                            dataLimite: dataLimite,
+                            createdBy: App.Core.Security.getUserId()
+                        };
 
-                            if (!lookupRes.contact) {
-                                App.UI.Loader.hide();
-                                alert("Responsável não encontrado na base de contatos.");
-                                return;
-                            }
-
-                            const payload = {
-                                action: 'createTask',
-                                userId: lookupRes.contact.id,
-                                titulo: titulo,
-                                descricao: desc,
-                                dataLimite: dataLimite,
-                                createdBy: App.Core.Security.getUserId()
-                            };
-
-                            App.Core.API.postEvent(payload, function(res) {
-                                App.UI.Loader.hide();
-                                if (res.status === 'success') {
-                                    App.UI.SuccessToast.show(1500);
-                                    App.Core.UI.Modal.close();
-                                    try { localStorage.removeItem('eventos_cache_v1'); localStorage.removeItem('tarefas_cache_v1'); } catch(e){}
-                                    fetchEventosData();
-                                } else {
-                                    alert("Erro: " + res.message);
-                                }
-                            });
-                        } catch (err) {
+                        App.Core.API.postEvent(payload, function(res) {
                             App.UI.Loader.hide();
-                            alert("Erro ao validar responsável.");
-                        }
+                            if (res.status === 'success') {
+                                App.UI.SuccessToast.show(1500);
+                                App.Core.UI.Modal.close();
+                                try { localStorage.removeItem('eventos_cache_v1'); localStorage.removeItem('tarefas_cache_v1'); } catch(e){}
+                                fetchEventosData();
+                            } else {
+                                alert("Erro: " + res.message);
+                            }
+                        });
                     },
                     className: "w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all mb-2 opacity-50 cursor-not-allowed pointer-events-none"
                 },
@@ -154,59 +139,33 @@ App.Eventos.CRUD = (function() {
         });
         
         const btnCreate = document.getElementById('btn-create-task');
-        if(btnCreate) btnCreate.disabled = true;
-    }
+        if (btnCreate) btnCreate.disabled = true;
 
-    function handleTaskPhoneInput(value) {
-        const btnCreate = document.getElementById('btn-create-task');
-        const nameEl = document.getElementById('task-resp-name');
-        
-        if (!value) {
-            if(btnCreate) {
-                btnCreate.disabled = true;
-                btnCreate.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
-            }
-            nameEl.innerText = "";
-        }
-    }
-
-    function lookupTaskResp() {
-        const phone = document.getElementById('task-resp-phone').value;
-        const nameEl = document.getElementById('task-resp-name');
-        const btnCreate = document.getElementById('btn-create-task');
-        
-        if (!phone) {
-            if(btnCreate) {
-                btnCreate.disabled = true;
-                btnCreate.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
-            }
-            nameEl.innerText = "";
-            return;
-        }
-        
-        nameEl.innerText = "Buscando...";
-        nameEl.className = "text-xs mt-1 text-slate-500 animate-pulse";
-        
-        const formattedPhone = App.Core.Utils.formatPhone(phone);
-        App.Core.API.postEvent({ action: 'lookupContactByPhone', phone: formattedPhone }, function(res) {
-            if (res.status === 'success' && res.contact) {
-                nameEl.innerText = "Responsável: " + res.contact.nome;
-                nameEl.className = "text-xs mt-1 text-emerald-600 font-medium";
-                
-                if(btnCreate) {
-                    btnCreate.disabled = false;
-                    btnCreate.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
-                }
-            } else {
-                nameEl.innerText = "Responsável não encontrado.";
-                nameEl.className = "text-xs mt-1 text-rose-500 font-medium";
-                
-                if(btnCreate) {
-                    btnCreate.disabled = true;
-                    btnCreate.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+        // [E2/S2] Componente de busca reutilizável — dropdown acima do modal (z-[130] > z-[120])
+        App.UI.ContactSearch.init('#task-resp-search-container', {
+            onResult: (contact) => {
+                const nameEl = document.getElementById('task-resp-name');
+                const btn = document.getElementById('btn-create-task');
+                if (contact) {
+                    taskRespId = contact.id;
+                    if (nameEl) {
+                        nameEl.innerText = "Responsável: " + contact.nome;
+                        nameEl.className = "text-xs mt-1 text-emerald-600 font-medium";
+                    }
+                    if (btn) { btn.disabled = false; btn.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
+                } else {
+                    taskRespId = null;
+                    if (nameEl) {
+                        nameEl.innerText = "Nenhum contato encontrado com este termo.";
+                        nameEl.className = "text-xs mt-1 text-rose-500 font-medium";
+                    }
+                    if (btn) { btn.disabled = true; btn.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
                 }
             }
         });
+
+        const csInput = document.getElementById('cs-input');
+        if (csInput) csInput.placeholder = "Nome ou Telefone do responsável...";
     }
 
     function openCreateModal() {
@@ -342,6 +301,8 @@ App.Eventos.CRUD = (function() {
 
     // ==========================================
     // INICIAR ATUAÇÃO (AUTO CHECK-IN ORGANIZADOR)
+    // [E1-b] Presença duplicada (auto-check-in já registrado): segue direto ao
+    // modal de presença, sem toast de sucesso duplicado.
     // ==========================================
     async function iniciarAtuacao(eventId) {
         const ev = eventosDatabase.find(e => e.idEvento === eventId);
@@ -375,7 +336,7 @@ App.Eventos.CRUD = (function() {
         };
 
         try {
-            await new Promise((resolve, reject) => {
+            const res = await new Promise((resolve, reject) => {
                 App.Core.API.postEvent(autoCheckinPayload, function(res) {
                     if (res.status === 'success') resolve(res);
                     else reject(res.message || 'Erro ao registrar atuação.');
@@ -383,11 +344,16 @@ App.Eventos.CRUD = (function() {
             });
             
             App.UI.Loader.hide();
-            App.UI.SuccessToast.show(1000);
             
-            setTimeout(() => {
+            // [E1-b] Se o auto-check-in já existia (duplicate), abre o modal diretamente
+            if (!res.duplicate) {
+                App.UI.SuccessToast.show(1000);
+                setTimeout(() => {
+                    openPresenceModal(eventId, mobIdToUse);
+                }, 1100);
+            } else {
                 openPresenceModal(eventId, mobIdToUse);
-            }, 1100);
+            }
 
         } catch (err) {
             App.UI.Loader.hide();
@@ -397,6 +363,7 @@ App.Eventos.CRUD = (function() {
 
     // ==========================================
     // PRESENÇA USANDO COMPONENTE REUTILIZÁVEL
+    // [E2/S1-a] O campo único do ContactForm aceita Telefone OU Nome.
     // ==========================================
     function openPresenceModal(eventId, mobId) {
         const ev = eventosDatabase.find(e => e.idEvento === eventId);
@@ -442,12 +409,17 @@ App.Eventos.CRUD = (function() {
                 };
 
                 try {
-                    await new Promise((resolve, reject) => {
+                    const presRes = await new Promise((resolve, reject) => {
                         App.Core.API.postEvent(payload, function(res) {
                             if (res.status === 'success') resolve(res);
                             else reject(res.message || 'Erro ao salvar presença.');
                         });
                     });
+
+                    // [E1-b] Presença duplicada: informa sem alarme de erro
+                    if (presRes.duplicate) {
+                        alert("Este participante já teve presença registrada neste evento.");
+                    }
 
                     let evInDb = eventosDatabase.find(e => e.idEvento === eventId);
                     if (evInDb) {
@@ -579,9 +551,7 @@ App.Eventos.CRUD = (function() {
         deactivateQR: deactivateQR,
         closeModal: closeModal,
         iniciarAtuacao: iniciarAtuacao,
-        openCreateTaskModal: openCreateTaskModal,
-        lookupTaskResp: lookupTaskResp,
-        handleTaskPhoneInput: handleTaskPhoneInput
+        openCreateTaskModal: openCreateTaskModal
     };
 })();
 

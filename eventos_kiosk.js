@@ -18,7 +18,6 @@ App.Eventos.Kiosk = {
         // [BLOCO A — Item 1.3] Pré-carga de bairros e dicionários em paralelo à validação do token.
         // O modo quiosque pula o initApp, logo em dispositivos sem cache o formulário de
         // participantes abria sem sugestões de bairro, equipes e funções.
-        // O carregamento é disparado sem await: o gate de validação do QR Code permanece imediato.
         App.Mapa.Dados.loadBairrosFromCache();      // síncrono: restaura cache local se existir
         App.Mapa.Dados.fetchBairrosFromNetwork();   // async: popula geoDicionario em background
         this.loadKioskDictionaries();               // async: popula window.dictsGlobal em background
@@ -123,6 +122,8 @@ App.Eventos.Kiosk = {
             this.kioskState.mobId = res.mobId;
             
             // Auto-Check-in do Organizador
+            // [E1-a] O backend agora deduplica: reabrimentos do quiosque no mesmo evento
+            // não geram novas linhas de presença do organizador.
             await this.autoCheckinMobilizer();
 
             App.UI.Loader.hide();
@@ -175,7 +176,6 @@ App.Eventos.Kiosk = {
         `;
 
         // [BLOCO A — Item 1.3] Popula o dropdown de Função com o dicionário carregado
-        // (antes o parâmetro era omitido e o select ficava vazio).
         let funcoesArray = [];
         if (window.dictsGlobal && window.dictsGlobal.funcoes_contato) {
             funcoesArray = window.dictsGlobal.funcoes_contato.map(f => f.nome);
@@ -203,12 +203,22 @@ App.Eventos.Kiosk = {
                 };
 
                 try {
-                    await new Promise((resolve, reject) => {
+                    const presRes = await new Promise((resolve, reject) => {
                         App.Core.API.postEvent(payload, function(res) {
                             if (res.status === 'success') resolve(res);
                             else reject(res.message || 'Erro ao salvar presença.');
                         });
                     });
+
+                    // [E1-b] Presença duplicada no quiosque: feedback âmbar no status.
+                    // O toast verde exibido antes refere-se ao salvamento do CONTATO, não à presença.
+                    if (presRes.duplicate) {
+                        const statusEl = document.getElementById('kiosk-status');
+                        if (statusEl) {
+                            statusEl.innerText = "Presença já registrada anteriormente para este participante.";
+                            statusEl.className = "p-4 text-center text-amber-500 text-sm font-bold";
+                        }
+                    }
                 } catch (err) {
                     alert("Contato salvo, mas erro ao registrar presença: " + err);
                 }
