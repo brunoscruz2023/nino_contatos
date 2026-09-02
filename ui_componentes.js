@@ -210,6 +210,12 @@ App.UI.ContactSearch = {
         if (!this.container) return;
         
         this.onResultCallback = config.onResult || function(){};
+        // [E2] Reset do estado singleton: o componente agora é instanciado em múltiplos
+        // contextos (Admin, Distribuir Material, Tarefa Avulsa, HierarchyBuilder) e o
+        // estado de uma instância anterior não deve vazar para a nova.
+        this.currentResults = [];
+        this.dropdownVisible = false;
+        this.highlightedIndex = -1;
 
         this.container.innerHTML = `
             <div class="relative">
@@ -304,11 +310,9 @@ App.UI.ContactSearch = {
             
             // [FIX T1-b / Item 1.9] Semântica de callbacks:
             // - Digitando (isTyping) com 0 resultados: NÃO dispara callback — evita render
-            //   prematuro da área "Cadastrar Novo Contato" com termo parcial. Apenas
-            //   feedback discreto abaixo do campo.
+            //   prematuro da área "Cadastrar Novo Contato" com termo parcial.
             // - Múltiplos resultados (digitação OU busca explícita): NÃO dispara callback(null) —
-            //   apenas o dropdown; a seleção do contato é que dispara o callback definitivo
-            //   (elimina o estado contraditório "não encontrado + lista de resultados").
+            //   apenas o dropdown; a seleção do contato é que dispara o callback definitivo.
             // - Busca explícita (botão/Enter) com 0 resultados: mantém callback(null) —
             //   o módulo host decide exibir a área de cadastro (comportamento desejado).
             // - Resultado único (digitação ou explícito): mantém callback(c) — auto-carregamento.
@@ -385,7 +389,8 @@ App.UI.ContactSearch = {
 
     clear: function() {
         if (!this.container) return;
-        document.getElementById('cs-input').value = '';
+        const input = document.getElementById('cs-input');
+        if (input) input.value = '';
         const feedback = document.getElementById('cs-feedback');
         if(feedback) feedback.classList.add('hidden');
         this.hideDropdown();
@@ -399,6 +404,9 @@ App.UI.ContactSearch = {
 
 // ==========================================
 // COMPONENTE: CONTACT FORM (Formulário Reutilizável)
+// [E2/S1-a] Campo único "Telefone ou Nome": aceita termo numérico (telefone,
+// fluxo original com estado "Novo") ou textual (nome — carrega contato único,
+// múltiplos exigem refinamento, zero resultados orientam a usar telefone).
 // ==========================================
 App.UI.ContactForm = {
     container: null,
@@ -459,9 +467,10 @@ App.UI.ContactForm = {
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 mb-1">Telefone <span class="text-rose-500">*</span></label>
+                        <!-- [E2/S1-a] Campo único: Telefone OU Nome -->
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Telefone ou Nome <span class="text-rose-500">*</span></label>
                         <div class="flex gap-2">
-                            <input type="tel" id="form-phone" class="flex-1 min-w-0 px-4 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="(21) 99999-9999">
+                            <input type="text" id="form-phone" class="flex-1 min-w-0 px-4 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Telefone (com DDD) ou Nome completo">
                             <button id="form-search-btn" onclick="App.UI.ContactForm.lookupPhone();" class="w-12 h-12 flex-shrink-0 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center" title="Buscar Contato">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                             </button>
@@ -588,16 +597,24 @@ App.UI.ContactForm = {
         }
     },
 
+    // [E2/S1-a] Método unificado: detecta Telefone ou Nome no campo único
     lookupPhone: async function() {
-        const rawPhone = this.container.querySelector('#form-phone').value;
-        const phone = App.Core.Utils.formatPhone(rawPhone);
-        if (!phone || phone.length < 10) return;
+        const rawValue = this.container.querySelector('#form-phone').value.trim();
+        if (!rawValue) return;
 
         const badgeEl = this.container.querySelector('#form-status-badge');
         const saveText = this.container.querySelector('#form-save-text');
         const saveBtn = this.container.querySelector('#form-save-btn');
         const searchBtn = this.container.querySelector('#form-search-btn');
         const clearBtn = this.container.querySelector('#form-clear-btn');
+        const phoneInput = this.container.querySelector('#form-phone');
+
+        // [E2/S1-a] Detecção de tipo: termo numérico = Telefone, textual = Nome
+        const cleanDigits = rawValue.replace(/\s|\(|\)|-/g, '');
+        const isPhone = /^\d+$/.test(cleanDigits);
+
+        const phone = isPhone ? App.Core.Utils.formatPhone(rawValue) : "";
+        if (isPhone && (!phone || phone.length < 10)) return;
 
         searchBtn.classList.add('hidden');
         clearBtn.classList.remove('hidden');
@@ -608,7 +625,11 @@ App.UI.ContactForm = {
 
         App.UI.Loader.show();
 
-        const payload = { action: 'lookupContact', term: phone, type: 'phone' };
+        // [E2/S1-a] type: 'phone' ou 'name' conforme o termo digitado
+        const payload = isPhone
+            ? { action: 'lookupContact', term: phone, type: 'phone' }
+            : { action: 'lookupContact', term: rawValue, type: 'name' };
+
         try {
             const res = await new Promise((resolve, reject) => {
                 App.Core.API.postEvent(payload, function(data) {
@@ -619,13 +640,39 @@ App.UI.ContactForm = {
 
             App.UI.Loader.hide();
 
-            const contact = res.contacts && res.contacts.length > 0 ? res.contacts[0] : null;
+            const contacts = res.contacts || [];
+
+            // [E2/S1-a] Nome com múltiplos resultados: não carrega — exige refinamento
+            // (o formulário não possui dropdown; listar aqui seria duplicar o ContactSearch)
+            if (!isPhone && contacts.length > 1) {
+                badgeEl.innerText = contacts.length + " contatos com este nome — refine ou busque por telefone.";
+                badgeEl.className = "px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700";
+                badgeEl.classList.remove('hidden');
+                return;
+            }
+
+            // [E2/S1-a] Nome sem resultados: NÃO libera estado "Novo" (campo contém texto,
+            // não telefone — salvar corromperia o dado). Orienta o usuário.
+            if (!isPhone && contacts.length === 0) {
+                badgeEl.innerText = "Nenhum contato com este nome. Para cadastrar novo, informe o telefone.";
+                badgeEl.className = "px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600";
+                badgeEl.classList.remove('hidden');
+                return;
+            }
+
+            const contact = contacts.length > 0 ? contacts[0] : null;
 
             if (contact) {
                 this.container.querySelector('#form-id').value = contact.id || "";
                 this.container.querySelector('#form-nome').value = contact.nome || "";
                 this.container.querySelector('#form-bairro').value = contact.bairro || "";
                 this.container.querySelector('#form-ref').value = contact.ref || "";
+                
+                // [E2/S1-a] Busca por nome: substitui o termo pelo telefone real do contato,
+                // garantindo que o salvar grave o telefone (não o termo textual digitado)
+                if (!isPhone) {
+                    phoneInput.value = contact.telefone || "";
+                }
                 
                 let equipeStr = contact.equipe || this.userTeam || "";
                 let teamsArr = equipeStr.split(',').map(t => t.trim().toUpperCase());
@@ -678,7 +725,7 @@ App.UI.ContactForm = {
                 }
             } else {
                 this.clear(true);
-                this.container.querySelector('#form-phone').value = rawPhone;
+                this.container.querySelector('#form-phone').value = rawValue;
                 
                 searchBtn.classList.add('hidden');
                 clearBtn.classList.remove('hidden');
@@ -709,6 +756,15 @@ App.UI.ContactForm = {
 
         if (!nome || !bairro || !phone) {
             alert("Nome, Bairro e Telefone são obrigatórios.");
+            return;
+        }
+
+        // [E2/S1-a] Guard de integridade do campo único: o campo Telefone-ou-Nome pode
+        // conter um termo textual (busca por nome sem seleção). O telefone gravado precisa
+        // ser numérico — bloqueia salvar texto como telefone.
+        const phoneDigits = phone.replace(/\D/g, '');
+        if (phoneDigits.length < 8) {
+            alert("O campo Telefone/Nome contém um termo inválido. Informe o telefone do contato (com DDD) para salvar.");
             return;
         }
 
@@ -811,44 +867,76 @@ App.UI.ContactForm = {
 
 // ==========================================
 // COMPONENTE: HIERARCHY BUILDER (Construtor e Visualizador de Árvore Hierárquica)
+// [E2/S3] Refatorado com busca única (App.UI.ContactSearch) + conceito de ALVO DE INSERÇÃO:
+// 1. Clicar no "+" de um nó define o alvo ("adicionando sob X", destacado em indigo).
+// 2. Sem alvo, o contato é inserido na RAIZ da estrutura.
+// 3. Selecionar contato na busca habilita o botão "Adicionar" (com o papel do select).
+// API pública preservada: init / getJson / loadJson / renderReadOnlyHtml.
 // ==========================================
 App.UI.HierarchyBuilder = {
     container: null,
     tree: [],
-    tempContact: null,
-    tempChild: { parentId: null, contact: null },
+    selectedContact: null,   // contato selecionado via ContactSearch
+    insertionTarget: null,   // node.id do alvo de inserção, ou null (raiz)
 
     init: function(containerSelector) {
         this.container = document.querySelector(containerSelector);
         this.tree = [];
-        this.tempContact = null;
-        this.tempChild = { parentId: null, contact: null };
-        this.render();
+        this.selectedContact = null;
+        this.insertionTarget = null;
+        this.renderShell();
     },
 
-    render: function() {
+    // Monta o shell persistente (busca + controles). A árvore é renderizada à parte
+    // (renderTree) para não destruir a instância do ContactSearch a cada mudança.
+    renderShell: function() {
         if (!this.container) return;
-        let html = `
+        this.container.innerHTML = `
             <div class="border-t border-slate-200 pt-3 mt-3">
                 <h4 class="text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">Estrutura Hierárquica</h4>
-                <div class="flex gap-2 mb-3">
-                    <input type="text" id="hier-search" class="flex-1 min-w-0 px-2 py-1.5 border border-slate-300 rounded text-xs transition-colors" placeholder="Telefone ou ID (raiz)..." oninput="this.classList.remove('border-emerald-500','bg-emerald-50','border-rose-300','bg-rose-50'); App.UI.HierarchyBuilder.handleSearch(this.value, 'root')">
-                    <select id="hier-role" class="px-2 py-1 border border-slate-300 rounded text-xs bg-white flex-shrink-0">
+                <div id="hier-search-container" class="mb-2"></div>
+                <div class="flex gap-2 mb-2">
+                    <select id="hier-role" class="flex-1 min-w-0 px-2 py-2 border border-slate-300 rounded text-xs bg-white">
                         <option value="Coord. Geral">Coord. Geral</option>
                         <option value="Coord. Área">Coord. Área</option>
                         <option value="Supervisor">Supervisor</option>
                         <option value="Mobilizador">Mobilizador</option>
                     </select>
-                    <button onclick="App.UI.HierarchyBuilder.addRootNode()" id="hier-add-btn" class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-indigo-600 text-white text-xs font-bold rounded disabled:opacity-50 transition-colors" disabled>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <button onclick="App.UI.HierarchyBuilder.addSelectedNode()" id="hier-add-btn" class="flex-shrink-0 px-3 flex items-center justify-center bg-indigo-600 text-white text-xs font-bold rounded disabled:opacity-50 transition-colors" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        <span class="ml-1">Adicionar</span>
                     </button>
                 </div>
+                <p id="hier-target-info" class="text-[10px] font-bold text-slate-400 mb-2 flex items-center gap-2">
+                    <span>Inserindo: <span id="hier-target-label" class="text-indigo-600">Raiz da estrutura</span></span>
+                    <button id="hier-target-reset" class="hidden text-slate-400 underline hover:text-slate-600" onclick="App.UI.HierarchyBuilder.clearInsertionTarget()">cancelar alvo</button>
+                </p>
                 <div id="hier-tree-view" class="space-y-2">
                     ${this.renderNodes(this.tree, 0)}
                 </div>
             </div>
         `;
-        this.container.innerHTML = html;
+
+        // [E2/S3] Busca por Nome ou Telefone (substitui os inputs de telefone/ID)
+        App.UI.ContactSearch.init('#hier-search-container', {
+            onResult: (contact) => {
+                this.selectedContact = contact;
+                const btn = document.getElementById('hier-add-btn');
+                if (btn) btn.disabled = !contact;
+            }
+        });
+
+        const csInput = document.getElementById('cs-input');
+        if (csInput) csInput.placeholder = "Buscar contato por Nome ou Telefone...";
+    },
+
+    // Renderiza apenas a árvore — preserva a busca e os controles do shell
+    renderTree: function() {
+        if (!this.container) return;
+        const view = this.container.querySelector('#hier-tree-view');
+        if (!view) return;
+        view.innerHTML = this.renderNodes(this.tree, 0);
+        this.updateTargetUI();
     },
 
     renderNodes: function(nodes, level) {
@@ -870,27 +958,19 @@ App.UI.HierarchyBuilder = {
             
             groups[tipo].forEach(node => {
                 let name = window.contatosBase && window.contatosBase[node.id] ? window.contatosBase[node.id].nome : node.id;
+                // [E2/S3] Nó-alvo destacado (anel indigo) para indicar onde o próximo contato será inserido
+                let isTarget = this.insertionTarget === node.id;
+                let targetClass = isTarget ? 'ring-2 ring-indigo-400 bg-indigo-50 border-indigo-300' : 'bg-slate-50 border-slate-200';
                 
                 html += `
                     <div class="flex flex-col gap-1">
-                        <div class="flex items-center gap-2 bg-slate-50 p-1.5 rounded border border-slate-200">
+                        <div class="flex items-center gap-2 ${targetClass} p-1.5 rounded border transition-colors">
                             <span class="text-xs font-bold text-slate-800 flex-1 min-w-0 truncate">${name}</span>
-                            <button onclick="App.UI.HierarchyBuilder.openAddChild('${node.id}')" class="flex-shrink-0 text-indigo-500 hover:text-indigo-700 transition-colors p-1 rounded hover:bg-indigo-50" title="Adicionar Subordinado">
+                            <button onclick="App.UI.HierarchyBuilder.setInsertionTarget('${node.id}')" class="flex-shrink-0 text-indigo-500 hover:text-indigo-700 transition-colors p-1 rounded hover:bg-indigo-100" title="Adicionar subordinado sob este contato">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                             </button>
                             <button onclick="App.UI.HierarchyBuilder.removeNode('${node.id}')" class="flex-shrink-0 text-rose-400 hover:text-rose-600 transition-colors p-1 rounded hover:bg-rose-50" title="Remover">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </button>
-                        </div>
-                        <div id="child-form-${node.id}" class="hidden flex gap-1 mt-1 mb-2 p-2 bg-slate-100 rounded">
-                            <input type="text" id="child-input-${node.id}" class="flex-1 min-w-0 px-2 py-1 border border-slate-300 rounded text-xs transition-colors" placeholder="Telefone ou ID..." oninput="this.classList.remove('border-emerald-500','bg-emerald-50','border-rose-300','bg-rose-50'); App.UI.HierarchyBuilder.handleSearch(this.value, 'child', '${node.id}')">
-                            <select id="child-role-${node.id}" class="px-2 py-1 border border-slate-300 rounded text-xs bg-white flex-shrink-0">
-                                <option value="Coord. Área">Coord. Área</option>
-                                <option value="Supervisor">Supervisor</option>
-                                <option value="Mobilizador">Mobilizador</option>
-                            </select>
-                            <button onclick="App.UI.HierarchyBuilder.addChildNode('${node.id}')" id="child-add-${node.id}" class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-indigo-600 text-white text-xs font-bold rounded disabled:opacity-50 transition-colors" disabled>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                             </button>
                         </div>
                         ${node.filhos && node.filhos.length > 0 ? this.renderNodes(node.filhos, level + 1) : ''}
@@ -906,75 +986,56 @@ App.UI.HierarchyBuilder = {
         return html;
     },
 
-    handleSearch: function(query, type, parentId = null) {
-        let formattedPhone = App.Core.Utils.formatPhone(query);
-        let queryUpper = query.trim().toUpperCase();
-        let btnId = type === 'root' ? 'hier-add-btn' : `child-add-${parentId}`;
-        let inputId = type === 'root' ? 'hier-search' : `child-input-${parentId}`;
-        let btn = document.getElementById(btnId);
-        let inputEl = document.getElementById(inputId);
-        
-        if (!query) {
-            if (type === 'root') this.tempContact = null;
-            else this.tempChild = { parentId, contact: null };
-            if(btn) btn.disabled = true;
-            if(inputEl) inputEl.classList.remove('border-emerald-500', 'bg-emerald-50', 'border-rose-300', 'bg-rose-50');
-            return;
-        }
+    // [E2/S3] Define o alvo de inserção e destaca o nó na árvore
+    setInsertionTarget: function(nodeId) {
+        this.insertionTarget = nodeId;
+        this.renderTree();
+    },
 
-        let found = null;
-        for (let id in window.contatosBase) {
-            if (window.contatosBase[id].telefone === formattedPhone || id === queryUpper) {
-                found = { id: id, ...window.contatosBase[id] };
-                break;
-            }
-        }
+    // [E2/S3] Volta a inserir na raiz
+    clearInsertionTarget: function() {
+        this.insertionTarget = null;
+        this.renderTree();
+    },
 
-        if (found) {
-            if (type === 'root') this.tempContact = found;
-            else this.tempChild = { parentId, contact: found };
-            if(btn) btn.disabled = false;
-            if(inputEl) {
-                inputEl.classList.remove('border-rose-300', 'bg-rose-50');
-                inputEl.classList.add('border-emerald-500', 'bg-emerald-50');
+    updateTargetUI: function() {
+        const label = document.getElementById('hier-target-label');
+        const resetBtn = document.getElementById('hier-target-reset');
+        if (!label) return;
+        if (this.insertionTarget) {
+            let name = window.contatosBase && window.contatosBase[this.insertionTarget] ? window.contatosBase[this.insertionTarget].nome : this.insertionTarget;
+            label.innerText = 'Sob ' + name;
+            if (resetBtn) resetBtn.classList.remove('hidden');
+        } else {
+            label.innerText = 'Raiz da estrutura';
+            if (resetBtn) resetBtn.classList.add('hidden');
+        }
+    },
+
+    // [E2/S3] Insere o contato selecionado na busca, sob o alvo (ou na raiz)
+    addSelectedNode: function() {
+        if (!this.selectedContact) return;
+        let role = document.getElementById('hier-role') ? document.getElementById('hier-role').value : 'Mobilizador';
+
+        if (this.insertionTarget) {
+            let parent = this.findNode(this.tree, this.insertionTarget);
+            if (parent) {
+                parent.filhos.push({ id: this.selectedContact.id, tipo: role, filhos: [] });
+            } else {
+                // Alvo não encontrado (nó foi removido): cai para a raiz
+                this.tree.push({ id: this.selectedContact.id, tipo: role, filhos: [] });
+                this.insertionTarget = null;
             }
         } else {
-            if (type === 'root') this.tempContact = null;
-            else this.tempChild = { parentId, contact: null };
-            if(btn) btn.disabled = true;
-            if(inputEl) {
-                inputEl.classList.remove('border-emerald-500', 'bg-emerald-50');
-                inputEl.classList.add('border-rose-300', 'bg-rose-50');
-            }
+            this.tree.push({ id: this.selectedContact.id, tipo: role, filhos: [] });
         }
-    },
 
-    addRootNode: function() {
-        if (!this.tempContact) return;
-        let role = document.getElementById('hier-role').value;
-        this.tree.push({ id: this.tempContact.id, tipo: role, filhos: [] });
-        this.tempContact = null;
-        this.render();
-    },
-
-    openAddChild: function(parentId) {
-        document.querySelectorAll('[id^="child-form-"]').forEach(div => div.classList.add('hidden'));
-        let form = document.getElementById(`child-form-${parentId}`);
-        if (form) {
-            form.classList.remove('hidden');
-            form.querySelector('input').focus();
-        }
-    },
-
-    addChildNode: function(parentId) {
-        if (!this.tempChild || !this.tempChild.contact) return;
-        let role = document.getElementById(`child-role-${parentId}`).value;
-        let parent = this.findNode(this.tree, parentId);
-        if (parent) {
-            parent.filhos.push({ id: this.tempChild.contact.id, tipo: role, filhos: [] });
-        }
-        this.tempChild = { parentId: null, contact: null };
-        this.render();
+        // Reseta a seleção para a próxima inserção
+        this.selectedContact = null;
+        App.UI.ContactSearch.clear();
+        const btn = document.getElementById('hier-add-btn');
+        if (btn) btn.disabled = true;
+        this.renderTree();
     },
 
     removeNode: function(nodeId) {
@@ -986,7 +1047,9 @@ App.UI.HierarchyBuilder = {
             });
         };
         this.tree = removeRecursive(this.tree);
-        this.render();
+        // [E2/S3] Se o nó removido era o alvo, volta a inserir na raiz
+        if (this.insertionTarget === nodeId) this.insertionTarget = null;
+        this.renderTree();
     },
 
     findNode: function(nodes, id) {
@@ -1010,7 +1073,7 @@ App.UI.HierarchyBuilder = {
         } catch (e) {
             this.tree = [];
         }
-        this.render();
+        this.renderTree();
     },
 
     renderReadOnlyHtml: function(jsonStr, presencasMap) {
