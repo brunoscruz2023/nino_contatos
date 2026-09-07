@@ -1,4 +1,14 @@
 // ui_componentes.js
+// [v7] HierarchyBuilder: contato SEM ID não pode ser adicionado à árvore de
+//      evento — bloqueio na ESCOLHA (botão desabilitado + feedback âmbar no
+//      shell) + defensiva no addSelectedNode. Complementa a validação backend
+//      v9 (validarEstruturaUnica rejeita nó id-vazio no salvar — rede de
+//      segurança). Participante de evento = contato com acesso (modelo v3).
+// [E2/S1-a] ContactForm: campo único "Telefone ou Nome" (v3, FIX A4 qualificado).
+// [1.9] ContactSearch: semântica de callbacks (digitação sem callback prematuro).
+// [A2] HierarchyBuilder: badge de presença própria (Fonte 1 — rawPresencas).
+// [A3] HierarchyBuilder: bloqueio de ID duplicado na árvore inteira (inserção).
+
 window.App = window.App || {};
 App.UI = App.UI || {};
 
@@ -210,9 +220,6 @@ App.UI.ContactSearch = {
         if (!this.container) return;
         
         this.onResultCallback = config.onResult || function(){};
-        // [E2] Reset do estado singleton: o componente agora é instanciado em múltiplos
-        // contextos (Admin, Distribuir Material, Tarefa Avulsa, HierarchyBuilder) e o
-        // estado de uma instância anterior não deve vazar para a nova.
         this.currentResults = [];
         this.dropdownVisible = false;
         this.highlightedIndex = -1;
@@ -226,7 +233,7 @@ App.UI.ContactSearch = {
                     </button>
                 </div>
                 <p id="cs-feedback" class="text-xs mt-1 font-medium hidden"></p>
-                <!-- [BLOCO A — Item 1.6] z-[130]: dropdown acima do overlay do modal genérico (z-[120]) -->
+                <!-- [1.6] z-[130]: dropdown acima do overlay do modal genérico (z-[120]) -->
                 <div id="cs-dropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto z-[130]"></div>
             </div>
         `;
@@ -308,14 +315,12 @@ App.UI.ContactSearch = {
             
             const contacts = res.contacts || [];
             
-            // [FIX T1-b / Item 1.9] Semântica de callbacks:
-            // - Digitando (isTyping) com 0 resultados: NÃO dispara callback — evita render
-            //   prematuro da área "Cadastrar Novo Contato" com termo parcial.
-            // - Múltiplos resultados (digitação OU busca explícita): NÃO dispara callback(null) —
-            //   apenas o dropdown; a seleção do contato é que dispara o callback definitivo.
-            // - Busca explícita (botão/Enter) com 0 resultados: mantém callback(null) —
-            //   o módulo host decide exibir a área de cadastro (comportamento desejado).
-            // - Resultado único (digitação ou explícito): mantém callback(c) — auto-carregamento.
+            // [1.9] Semântica de callbacks:
+            // - Digitando com 0 resultados: NÃO dispara callback (evita render prematuro).
+            // - Múltiplos resultados: NÃO dispara callback(null) — apenas o dropdown;
+            //   a seleção dispara o callback definitivo.
+            // - Busca explícita com 0 resultados: mantém callback(null) (área de cadastro).
+            // - Resultado único: mantém callback(c) — auto-carregamento.
             if (contacts.length === 0) {
                 this.hideDropdown();
                 if (isTyping) {
@@ -404,9 +409,8 @@ App.UI.ContactSearch = {
 
 // ==========================================
 // COMPONENTE: CONTACT FORM (Formulário Reutilizável)
-// [E2/S1-a] Campo único "Telefone ou Nome": aceita termo numérico (telefone,
-// fluxo original com estado "Novo") ou textual (nome — carrega contato único,
-// múltiplos exigem refinamento, zero resultados orientam a usar telefone).
+// [E2/S1-a] Campo único "Telefone ou Nome". [v3] ID carregado mesmo vazio
+// (existente-sem-ID salvável na MESMA linha via telefone — sem duplicação).
 // ==========================================
 App.UI.ContactForm = {
     container: null,
@@ -609,7 +613,6 @@ App.UI.ContactForm = {
         const clearBtn = this.container.querySelector('#form-clear-btn');
         const phoneInput = this.container.querySelector('#form-phone');
 
-        // [E2/S1-a] Detecção de tipo: termo numérico = Telefone, textual = Nome
         const cleanDigits = rawValue.replace(/\s|\(|\)|-/g, '');
         const isPhone = /^\d+$/.test(cleanDigits);
 
@@ -625,7 +628,6 @@ App.UI.ContactForm = {
 
         App.UI.Loader.show();
 
-        // [E2/S1-a] type: 'phone' ou 'name' conforme o termo digitado
         const payload = isPhone
             ? { action: 'lookupContact', term: phone, type: 'phone' }
             : { action: 'lookupContact', term: rawValue, type: 'name' };
@@ -642,8 +644,6 @@ App.UI.ContactForm = {
 
             const contacts = res.contacts || [];
 
-            // [E2/S1-a] Nome com múltiplos resultados: não carrega — exige refinamento
-            // (o formulário não possui dropdown; listar aqui seria duplicar o ContactSearch)
             if (!isPhone && contacts.length > 1) {
                 badgeEl.innerText = contacts.length + " contatos com este nome — refine ou busque por telefone.";
                 badgeEl.className = "px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700";
@@ -651,8 +651,6 @@ App.UI.ContactForm = {
                 return;
             }
 
-            // [E2/S1-a] Nome sem resultados: NÃO libera estado "Novo" (campo contém texto,
-            // não telefone — salvar corromperia o dado). Orienta o usuário.
             if (!isPhone && contacts.length === 0) {
                 badgeEl.innerText = "Nenhum contato com este nome. Para cadastrar novo, informe o telefone.";
                 badgeEl.className = "px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600";
@@ -663,13 +661,13 @@ App.UI.ContactForm = {
             const contact = contacts.length > 0 ? contacts[0] : null;
 
             if (contact) {
+                // [v3] O id pode vir vazio (contato de mapa): o formulário segue
+                // carregado/editável — o salvar atualizará a MESMA linha via telefone.
                 this.container.querySelector('#form-id').value = contact.id || "";
                 this.container.querySelector('#form-nome').value = contact.nome || "";
                 this.container.querySelector('#form-bairro').value = contact.bairro || "";
                 this.container.querySelector('#form-ref').value = contact.ref || "";
                 
-                // [E2/S1-a] Busca por nome: substitui o termo pelo telefone real do contato,
-                // garantindo que o salvar grave o telefone (não o termo textual digitado)
                 if (!isPhone) {
                     phoneInput.value = contact.telefone || "";
                 }
@@ -701,7 +699,7 @@ App.UI.ContactForm = {
                 }
 
                 if (this.canEdit) {
-                    badgeEl.innerText = "Existente";
+                    badgeEl.innerText = contact.id ? "Existente" : "Existente (sem ID)";
                     badgeEl.className = "px-3 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-700";
                     badgeEl.classList.remove('hidden');
                     
@@ -759,12 +757,10 @@ App.UI.ContactForm = {
             return;
         }
 
-        // [E2/S1-a] Guard de integridade do campo único: o campo Telefone-ou-Nome pode
-        // conter um termo textual (busca por nome sem seleção). O telefone gravado precisa
-        // ser numérico — bloqueia salvar texto como telefone.
+        // Guard de integridade: o campo Telefone-ou-Nome precisa conter telefone válido
         const phoneDigits = phone.replace(/\D/g, '');
         if (phoneDigits.length < 8) {
-            alert("O campo Telefone/Nome contém um termo inválido. Informe o telefone do contato (com DDD) para salvar.");
+            alert("Informe o telefone do contato (com DDD) para salvar.");
             return;
         }
 
@@ -778,8 +774,13 @@ App.UI.ContactForm = {
         const coords = await App.Core.Utils.getLocation();
         const userId = App.Core.Security.getUserId();
 
+        // [v3 / FIX A4] Chamada qualificada com o caminho completo do objeto.
+        // O backend decide: id vazio + telefone inexistente -> createContact (linha
+        // nova SEM ID); id vazio + telefone existente -> updateContact por telefone
+        // (mesma linha); id preenchido -> updateContact por ID.
+        const isUpdate = (id !== "") || App.UI.ContactForm.isExistingByPhone();
         const payload = {
-            action: id ? 'updateContact' : 'createContact',
+            action: isUpdate ? 'updateContact' : 'createContact',
             id: id,
             nome: nome, bairro: bairro, telefone: phone, ref: ref, equipe: equipe, funcao: funcao,
             lat: coords.lat,
@@ -797,13 +798,9 @@ App.UI.ContactForm = {
             
             App.UI.Loader.hide();
 
-            if (!id && res.newId) {
-                this.container.querySelector('#form-id').value = res.newId;
-            }
-
             App.UI.SuccessToast.show(1500);
 
-            this.onSaveCallback({ id: this.container.querySelector('#form-id').value, nome, bairro, phone, ref, equipe, funcao });
+            this.onSaveCallback({ id: id, nome, bairro, phone, ref, equipe, funcao });
 
             setTimeout(() => {
                 this.clear();
@@ -816,6 +813,15 @@ App.UI.ContactForm = {
             btn.classList.remove('opacity-50');
             this.container.querySelector('#form-save-text').innerText = id ? "Atualizar Contato" : "Cadastrar Contato";
         }
+    },
+
+    // [v3] Helper: contato existente carregado no formulário (badge "Existente"),
+    // com ou sem ID. Sem ele, salvar um existente-sem-ID criaria linha duplicada.
+    isExistingByPhone: function() {
+        const badgeEl = this.container ? this.container.querySelector('#form-status-badge') : null;
+        if (!badgeEl) return false;
+        const badgeText = badgeEl.innerText || "";
+        return badgeText.indexOf("Existente") === 0;
     },
 
     cancel: function() {
@@ -866,18 +872,21 @@ App.UI.ContactForm = {
 };
 
 // ==========================================
-// COMPONENTE: HIERARCHY BUILDER (Construtor e Visualizador de Árvore Hierárquica)
-// [E2/S3] Refatorado com busca única (App.UI.ContactSearch) + conceito de ALVO DE INSERÇÃO:
-// 1. Clicar no "+" de um nó define o alvo ("adicionando sob X", destacado em indigo).
-// 2. Sem alvo, o contato é inserido na RAIZ da estrutura.
-// 3. Selecionar contato na busca habilita o botão "Adicionar" (com o papel do select).
+// COMPONENTE: HIERARCHY BUILDER
+// [E2/S3] Busca única (ContactSearch) + alvo de inserção.
+// [A3] Bloqueio de ID duplicado NA ÁRVORE INTEIRA na inserção.
+// [A2] Badge de presença própria no modo leitura (Fonte 1 — rawPresencas).
+// [v7] Contato SEM ID: botão Adicionar desabilitado na SELEÇÃO + feedback âmbar
+//      no shell + defensiva no addSelectedNode. Participante de evento = contato
+//      com acesso (modelo v3); contatos-sem-ID são base de mapa. Complementa a
+//      validação backend v9 (validarEstruturaUnica rejeita nó id-vazio no salvar).
 // API pública preservada: init / getJson / loadJson / renderReadOnlyHtml.
 // ==========================================
 App.UI.HierarchyBuilder = {
     container: null,
     tree: [],
-    selectedContact: null,   // contato selecionado via ContactSearch
-    insertionTarget: null,   // node.id do alvo de inserção, ou null (raiz)
+    selectedContact: null,
+    insertionTarget: null,
 
     init: function(containerSelector) {
         this.container = document.querySelector(containerSelector);
@@ -887,14 +896,14 @@ App.UI.HierarchyBuilder = {
         this.renderShell();
     },
 
-    // Monta o shell persistente (busca + controles). A árvore é renderizada à parte
-    // (renderTree) para não destruir a instância do ContactSearch a cada mudança.
     renderShell: function() {
         if (!this.container) return;
         this.container.innerHTML = `
             <div class="border-t border-slate-200 pt-3 mt-3">
                 <h4 class="text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">Estrutura Hierárquica</h4>
                 <div id="hier-search-container" class="mb-2"></div>
+                <!-- [v7] Feedback de seleção inválida (contato sem ID) -->
+                <p id="hier-feedback" class="text-xs font-medium mb-2 hidden"></p>
                 <div class="flex gap-2 mb-2">
                     <select id="hier-role" class="flex-1 min-w-0 px-2 py-2 border border-slate-300 rounded text-xs bg-white">
                         <option value="Coord. Geral">Coord. Geral</option>
@@ -918,11 +927,30 @@ App.UI.HierarchyBuilder = {
         `;
 
         // [E2/S3] Busca por Nome ou Telefone (substitui os inputs de telefone/ID)
+        // [v7] Contato sem ID: botão PERMANECE desabilitado + feedback âmbar —
+        // a seleção não habilita adição de quem não tem acesso ao painel.
         App.UI.ContactSearch.init('#hier-search-container', {
             onResult: (contact) => {
                 this.selectedContact = contact;
                 const btn = document.getElementById('hier-add-btn');
-                if (btn) btn.disabled = !contact;
+                const feedback = document.getElementById('hier-feedback');
+                
+                if (contact && contact.id && contact.id !== "") {
+                    if (btn) btn.disabled = false;
+                    if (feedback) feedback.classList.add('hidden');
+                } else if (contact) {
+                    // [v7] Sem ID — nunca habilita
+                    this.selectedContact = null;  // zera para a defensiva não liberar por outra via
+                    if (btn) btn.disabled = true;
+                    if (feedback) {
+                        feedback.innerText = contact.nome + " não possui acesso ao painel. Conceda o acesso pelo Admin antes de adicioná-lo à estrutura.";
+                        feedback.className = "text-xs font-medium mb-2 text-amber-600";
+                        feedback.classList.remove('hidden');
+                    }
+                } else {
+                    if (btn) btn.disabled = true;
+                    if (feedback) feedback.classList.add('hidden');
+                }
             }
         });
 
@@ -930,7 +958,6 @@ App.UI.HierarchyBuilder = {
         if (csInput) csInput.placeholder = "Buscar contato por Nome ou Telefone...";
     },
 
-    // Renderiza apenas a árvore — preserva a busca e os controles do shell
     renderTree: function() {
         if (!this.container) return;
         const view = this.container.querySelector('#hier-tree-view');
@@ -958,7 +985,6 @@ App.UI.HierarchyBuilder = {
             
             groups[tipo].forEach(node => {
                 let name = window.contatosBase && window.contatosBase[node.id] ? window.contatosBase[node.id].nome : node.id;
-                // [E2/S3] Nó-alvo destacado (anel indigo) para indicar onde o próximo contato será inserido
                 let isTarget = this.insertionTarget === node.id;
                 let targetClass = isTarget ? 'ring-2 ring-indigo-400 bg-indigo-50 border-indigo-300' : 'bg-slate-50 border-slate-200';
                 
@@ -986,13 +1012,24 @@ App.UI.HierarchyBuilder = {
         return html;
     },
 
-    // [E2/S3] Define o alvo de inserção e destaca o nó na árvore
+    // [A3] Verifica se o ID já existe em QUALQUER nó da árvore
+    idExistsInTree: function(nodes, id) {
+        if (!nodes || nodes.length === 0) return null;
+        for (let i = 0; i < nodes.length; i++) {
+            if (nodes[i].id === id) return nodes[i];
+            if (nodes[i].filhos && nodes[i].filhos.length > 0) {
+                let found = this.idExistsInTree(nodes[i].filhos, id);
+                if (found) return found;
+            }
+        }
+        return null;
+    },
+
     setInsertionTarget: function(nodeId) {
         this.insertionTarget = nodeId;
         this.renderTree();
     },
 
-    // [E2/S3] Volta a inserir na raiz
     clearInsertionTarget: function() {
         this.insertionTarget = null;
         this.renderTree();
@@ -1012,9 +1049,24 @@ App.UI.HierarchyBuilder = {
         }
     },
 
-    // [E2/S3] Insere o contato selecionado na busca, sob o alvo (ou na raiz)
     addSelectedNode: function() {
         if (!this.selectedContact) return;
+        
+        // [v7] Defensiva: contato sem ID jamais entra na árvore por qualquer via
+        if (!this.selectedContact.id || this.selectedContact.id === "") {
+            alert("Este contato não possui acesso ao painel. Conceda o acesso pelo Admin antes de adicioná-lo à estrutura do evento.");
+            return;
+        }
+        
+        // [A3] Bloqueio na INSERÇÃO: contato já presente na árvore inteira
+        let existing = this.idExistsInTree(this.tree, this.selectedContact.id);
+        if (existing) {
+            let existingName = window.contatosBase && window.contatosBase[existing.id] ? window.contatosBase[existing.id].nome : existing.id;
+            let existingRole = existing.tipo || 'nível não definido';
+            alert("Este contato já está na estrutura deste evento como " + existingRole + " (" + existingName + "). Cada contato só pode figurar uma vez por evento.");
+            return;
+        }
+
         let role = document.getElementById('hier-role') ? document.getElementById('hier-role').value : 'Mobilizador';
 
         if (this.insertionTarget) {
@@ -1022,7 +1074,6 @@ App.UI.HierarchyBuilder = {
             if (parent) {
                 parent.filhos.push({ id: this.selectedContact.id, tipo: role, filhos: [] });
             } else {
-                // Alvo não encontrado (nó foi removido): cai para a raiz
                 this.tree.push({ id: this.selectedContact.id, tipo: role, filhos: [] });
                 this.insertionTarget = null;
             }
@@ -1030,7 +1081,6 @@ App.UI.HierarchyBuilder = {
             this.tree.push({ id: this.selectedContact.id, tipo: role, filhos: [] });
         }
 
-        // Reseta a seleção para a próxima inserção
         this.selectedContact = null;
         App.UI.ContactSearch.clear();
         const btn = document.getElementById('hier-add-btn');
@@ -1047,7 +1097,6 @@ App.UI.HierarchyBuilder = {
             });
         };
         this.tree = removeRecursive(this.tree);
-        // [E2/S3] Se o nó removido era o alvo, volta a inserir na raiz
         if (this.insertionTarget === nodeId) this.insertionTarget = null;
         this.renderTree();
     },
@@ -1105,11 +1154,20 @@ App.UI.HierarchyBuilder = {
             
             groups[tipo].forEach(node => {
                 let name = window.contatosBase && window.contatosBase[node.id] ? window.contatosBase[node.id].nome : node.id;
+                
+                // [A2] Badge de presença própria: o nó (qualquer papel) tem
+                // presença registrada para SI MESMO neste evento
+                let selfBadge = '';
+                if (presencasMap && presencasMap[node.id] && presencasMap[node.id].selfCheckin) {
+                    selfBadge = '<span class="ml-1 text-indigo-500 text-xs font-bold" title="Check-in realizado">✓</span>';
+                }
+                
+                // Lista de presentes: apenas mobilizadores (comportamento original)
                 let presHTML = '';
                 let tipoLower = (node.tipo || "").toLowerCase();
                 
-                if (tipoLower.includes("mob") && presencasMap && presencasMap[node.id]) {
-                    let presIds = presencasMap[node.id];
+                if (tipoLower.includes("mob") && presencasMap && presencasMap[node.id] && presencasMap[node.id].presentes) {
+                    let presIds = presencasMap[node.id].presentes;
                     let pPresencaHTML = presIds.map(id => {
                         const c = window.contatosBase[id];
                         return c ? `<span class="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded mr-1 mb-1 inline-block">${c.nome}</span>` : '';
@@ -1126,7 +1184,7 @@ App.UI.HierarchyBuilder = {
                 html += `
                     <div class="flex flex-col gap-1">
                         <div class="flex items-center gap-2 bg-slate-50 p-1.5 rounded border border-slate-200">
-                            <span class="text-xs font-bold text-slate-800 flex-1 min-w-0 truncate">${name}</span>
+                            <span class="text-xs font-bold text-slate-800 flex-1 min-w-0 truncate">${name}${selfBadge}</span>
                         </div>
                         ${presHTML}
                         ${node.filhos && node.filhos.length > 0 ? this.renderReadOnlyNodes(node.filhos, level + 1, presencasMap) : ''}

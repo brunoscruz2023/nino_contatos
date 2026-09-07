@@ -1,9 +1,57 @@
 // eventos_app.js
+// [BLOCO A — Item 1.4] Navegação mensal corrigida (setDate(1) antes de setMonth).
+// [A2] Badge de check-in próprio: Fonte 1 ÚNICA (rawPresencas — organizador ==
+//      participante na aba Presencas, para nó presente na árvore).
+// [A2-2] getTreeParticipants: helper GLOBAL com cache por idEvento; getFilteredEventos
+//      (ABAC da Agenda) considera a árvore INTEIRA (qualquer papel).
+// [F3] renderEventCard: botão de ação condicional — participante COM check-in vê
+//      "Cadastrar Presenças" (esmeralda; abre openPresenceModal direto, sem
+//      re-auto-check-in); SEM check-in vê "Iniciar Atuação" (âmbar; fluxo A2).
+//      Complementa o F2 (core.js v3): pendência de login some após check-in —
+//      o registro de presentes permanece acessível pela Agenda, permanentemente.
+// [LIMPEZA] handleEventCardClick removido (código morto — FAB oculto).
+//      onclick inválido do renderTaskCard removido (AccordionList.toggle não existe).
+
 let currentCalendarDate = new Date();
 let currentViewMode = 'month'; // 'month', 'week', 'day'
 let activeWeekStartDate = null;
 let activeDayDate = null;
 let eventosInicializado = false;
+
+// [A2-2] Helper global: IDs de TODOS os nós da árvore do evento (qualquer papel).
+// Cache interno por idEvento (rawJson é imutável durante a sessão — evita re-parse
+// a cada render). Consumido por: getFilteredEventos (este arquivo), iniciarAtuacao
+// (eventos_crud.js), getPendingEventTasks (core.js — via referência runtime).
+var _treeParticipantsCache = {};
+function getTreeParticipants(ev) {
+    if (!ev || !ev.rawJson || ev.rawJson === "[]" || ev.rawJson === "") return [];
+    if (_treeParticipantsCache[ev.idEvento]) return _treeParticipantsCache[ev.idEvento];
+    
+    var ids = [];
+    try {
+        var treeNodes = JSON.parse(ev.rawJson);
+        var collectIds = function(nodes) {
+            (nodes || []).forEach(function(n) {
+                if (n && n.id) ids.push(n.id);
+                if (n && n.filhos && n.filhos.length > 0) collectIds(n.filhos);
+            });
+        };
+        collectIds(treeNodes);
+    } catch (e) { /* JSON inválido — retorna vazio */ }
+    
+    _treeParticipantsCache[ev.idEvento] = ids;
+    return ids;
+}
+
+// [A2/F3] Helper global: verifica se o usuário logado já fez check-in
+// (presença própria: org == part == userId no rawPresencas).
+// Usado pelo renderEventCard (F3 — botão condicional). Mesma semântica da
+// Fonte 1 do badge e do F2 do core.js.
+function hasOwnCheckin(ev, userId) {
+    if (!ev || !ev.rawPresencas || !userId) return false;
+    var ownList = ev.rawPresencas[userId] || [];
+    return ownList.indexOf(userId) !== -1;
+}
 
 function initEventos() {
     if (eventosInicializado) return;
@@ -43,8 +91,8 @@ function initEventos() {
 
 function navigate(delta) {
     if (currentViewMode === 'month') {
-        // [BLOCO A — Item 1.4] Fixa o dia em 1 antes do setMonth para evitar o salto de mês
-        // (ex.: 31/jan + setMonth(+1) resultaria em 03/mar, pulando fevereiro).
+        // [BLOCO A — Item 1.4] Fixa o dia em 1 antes do setMonth para evitar o salto
+        // de mês (ex.: 31/jan + setMonth(+1) resultaria em 03/mar, pulando fevereiro).
         currentCalendarDate.setDate(1);
         currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
     } else if (currentViewMode === 'week') {
@@ -79,12 +127,15 @@ function setDayView(dayTimestamp) {
 }
 
 // ETAPA 4: Filtro ABAC aplicado para Eventos
+// [A2-2] Participação verificada na ÁRVORE INTEIRA (qualquer nó — coord/sup/mob).
 function getFilteredEventos() {
     let filtered = eventosDatabase;
 
     if (currentSession && currentSession.funcoes && currentSession.funcoes.agenda === '001' && currentSession.id && currentSession.id !== 'LEGADO' && currentSession.id !== 'ADMIN') {
         const userId = currentSession.id;
         filtered = filtered.filter(ev => {
+            let treeIds = getTreeParticipants(ev);
+            if (treeIds.indexOf(userId) !== -1) return true;
             if (!ev.participacoes || ev.participacoes.length === 0) return false;
             return ev.participacoes.some(p => p.coordenadorId === userId || p.supervisorId === userId || p.mobilizadorId === userId);
         });
@@ -101,7 +152,7 @@ function getFilteredEventos() {
     return filtered;
 }
 
-// NOVO: Filtro ABAC para Tarefas Avulsas
+// Filtro ABAC para Tarefas Avulsas
 function getFilteredTasks() {
     if (!tarefasDatabase || tarefasDatabase.length === 0) return [];
     let filtered = tarefasDatabase;
@@ -286,7 +337,7 @@ function renderEventosView() {
         subheaderContent.innerHTML = `
             <div class="flex items-center justify-start w-full gap-1">
                 <div class="w-5 md:w-6 flex-shrink-0 flex items-center justify-center">${calIcon}</div>
-                <div class="flex-1 flex items-center justify-center gap-2">
+                <div class="flex flex-1 items-center justify-center gap-2">
                     <button onclick="navigate(-1)" class="p-2 text-slate-500 font-bold hover:text-indigo-600 transition-colors">‹</button>
                     <span class="font-bold text-sm md:text-lg text-slate-800 capitalize text-center">${title}</span>
                     <button onclick="navigate(1)" class="p-2 text-slate-500 font-bold hover:text-indigo-600 transition-colors">›</button>
@@ -345,19 +396,43 @@ function renderWeekButton(weekStartDate) {
     `;
 }
 
+// [A2/F3] Card de evento — badge via Fonte 1 ÚNICA (rawPresencas) + botão
+// de ação CONDICIONAL (F3):
+//   - Participante COM check-in: "Cadastrar Presenças" (esmeralda) — abre
+//     openPresenceModal direto (registrar presentes sem re-auto-check-in).
+//   - Participante SEM check-in: "Iniciar Atuação" (âmbar) — fluxo A2 completo.
+//   - Não-participante com permissão: apenas Editar (se gestor).
 function renderEventCard(ev) {
     const isDev = ev.tipo.toLowerCase().startsWith('dev');
     const uiColor = isDev 
         ? { text: "text-sky-600", dot: "bg-sky-500", border: "border-sky-400" } 
         : { text: "text-emerald-600", dot: "bg-emerald-500", border: "border-emerald-400" };
     
+    // [A2-2] IDs de todos os nós da árvore (helper com cache)
+    let allIds = getTreeParticipants(ev);
+    
+    // [A2] presencasMap na estrutura { presentes: [...], selfCheckin: bool }
     let presencasMap = {};
     if (ev.participacoes && ev.participacoes.length > 0) {
         ev.participacoes.forEach(p => {
             if (p.mobilizadorId && p.mobilizadorId !== "ND") {
-                presencasMap[p.mobilizadorId] = p.presentesIds;
+                presencasMap[p.mobilizadorId] = presencasMap[p.mobilizadorId] || { presentes: [], selfCheckin: false };
+                presencasMap[p.mobilizadorId].presentes = p.presentesIds;
             }
         });
+    }
+    
+    // [A2] Fonte 1 — ÚNICA: nó da árvore cujo ID figura como organizador E
+    // participante (check-in próprio gravado pelo iniciarAtuacao/kiosk com
+    // mobId = presence = userId do participante).
+    if (ev.rawPresencas) {
+        for (let orgId in ev.rawPresencas) {
+            let parts = ev.rawPresencas[orgId] || [];
+            if (parts.indexOf(orgId) !== -1 && allIds.indexOf(orgId) !== -1) {
+                presencasMap[orgId] = presencasMap[orgId] || { presentes: [], selfCheckin: false };
+                presencasMap[orgId].selfCheckin = true;
+            }
+        }
     }
 
     let hierarquiaHTML = '';
@@ -368,29 +443,34 @@ function renderEventCard(ev) {
     }
     
     let canEdit = App.Core.Security.canCreateEvent();
-    let canCheckin = App.Core.Security.canCheckIn(); // Removido o bloqueio de data (isPast)
+    let canCheckin = App.Core.Security.canCheckIn();
+    const userId = App.Core.Security.getUserId();
+    
+    // [F3] Botão condicional: estado do participante logado neste evento
+    let userIsParticipant = userId && allIds.indexOf(userId) !== -1;
+    let userHasCheckin = userIsParticipant && hasOwnCheckin(ev, userId);
     
     let actionButtons = '';
-    if (canEdit || canCheckin) {
+    if (canEdit || (canCheckin && userIsParticipant)) {
         let btnsHTML = '';
         if (canEdit) {
             btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.openEditModal('${ev.idEvento}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors">Editar Evento</button>`;
         }
-        if (canCheckin) {
-            btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.iniciarAtuacao('${ev.idEvento}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors">Iniciar Atuação</button>`;
+        if (canCheckin && userIsParticipant) {
+            if (userHasCheckin) {
+                // [F3] Já checkou — acesso direto ao registro de presentes
+                btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.openPresenceModal('${ev.idEvento}', '${userId}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">Cadastrar Presenças</button>`;
+            } else {
+                // [F3] Sem check-in — fluxo A2 (auto-check-in + modal)
+                btnsHTML += `<button onclick="event.stopPropagation(); App.Eventos.CRUD.iniciarAtuacao('${ev.idEvento}')" class="flex-1 px-3 py-1.5 text-xs font-bold text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors">Iniciar Atuação</button>`;
+            }
         }
         actionButtons = `<div class="flex gap-2 mt-4 border-t border-slate-100 pt-3 flex-wrap">${btnsHTML}</div>`;
     }
 
-    let firstMobId = '';
-    if (ev.participacoes && ev.participacoes.length > 0) {
-        let p = ev.participacoes.find(pa => pa.mobilizadorId && pa.mobilizadorId !== "ND");
-        if (p) firstMobId = p.mobilizadorId;
-    }
-    
     return `
         <div class="accordion-card bg-white p-4 rounded-2xl border border-slate-100 shadow-sm cursor-pointer">
-            <div class="accordion-header flex items-center gap-4" onclick="handleEventCardClick(this.closest('.accordion-card'), '${ev.idEvento}', '${firstMobId}')">
+            <div class="accordion-header flex items-center gap-4">
                 <div class="w-10 h-10 rounded-xl ${uiColor.dot} bg-opacity-10 flex items-center justify-center flex-shrink-0">
                     <div class="w-3 h-3 rounded-full ${uiColor.dot}"></div>
                 </div>
@@ -423,20 +503,7 @@ function renderEventCard(ev) {
     `;
 }
 
-// NOVA FUNÇÃO: Detecta abertura/fechamento do card e altera o FAB
-window.handleEventCardClick = function(cardEl, evId, mobId) {
-    setTimeout(() => {
-        const content = cardEl.querySelector('.accordion-content');
-        const isOpen = content.style.maxHeight && content.style.maxHeight !== '0px';
-        if (isOpen) {
-            App.Layout.Shell.setEventFab(evId, mobId);
-        } else {
-            App.Layout.Shell.resetFab();
-        }
-    }, 10);
-};
-
-// NOVA FUNÇÃO: Renderiza o card de Tarefa Avulsa
+// Card de Tarefa Avulsa
 function renderTaskCard(t) {
     const isPending = t.status.toLowerCase() === 'pendente';
     const uiColor = isPending 
@@ -459,7 +526,7 @@ function renderTaskCard(t) {
     
     return `
         <div class="accordion-card bg-white p-4 rounded-2xl border border-slate-100 shadow-sm cursor-pointer">
-            <div class="accordion-header flex items-center gap-4" onclick="App.UI.AccordionList.toggle(this.closest('.accordion-card'))">
+            <div class="accordion-header flex items-center gap-4">
                 <div class="w-10 h-10 rounded-xl ${uiColor.dot} bg-opacity-10 flex items-center justify-center flex-shrink-0">
                     <div class="w-3 h-3 rounded-full ${uiColor.dot}"></div>
                 </div>

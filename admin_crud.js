@@ -1,4 +1,14 @@
 // admin_crud.js
+// [1.8] Abas internas condicionais por RBAC (Acessos exige admin; Materiais exige
+//       materiais) + guard de aba ativa + subtítulo condicional + fallback defensivo.
+// [v3]  Acessos: contato sem ID → "ID: será gerado ao salvar"; saveAccess envia
+//       userPhone (backend cria ID ao conceder acesso); modal de cadastro sem
+//       RBAC automático (contato nasce sem ID — configuração via Aba Acessos).
+// [v7]  Distribuir Material: receptor SEM ID bloqueado na seleção (botão
+//       desabilitado + feedback âmbar). confirmMaterialReceipt valida receptor ==
+//       userId logado — sem ID não há login, logo não há confirmação de recebimento
+//       (pendência eterna). Receptor de material = participante com acesso.
+
 window.App = window.App || {};
 App.Admin = App.Admin || {};
 
@@ -13,9 +23,10 @@ App.Admin.CRUD = {
         const view = document.getElementById('view-admin');
         if (!view) return;
 
-        // [FIX T1-a / Item 1.8] Abas condicionais por RBAC:
-        // a aba Acessos exige acesso ao módulo admin; a aba Materiais exige acesso ao módulo materiais.
-        // Perfis com apenas Materiais (ex.: Admin=000, Materiais=002) passam a ver somente a aba Materiais.
+        // [1.8] Abas condicionais por RBAC:
+        // a aba Acessos exige acesso ao módulo admin; a aba Materiais exige acesso
+        // ao módulo materiais. Perfis com apenas Materiais (Admin=000, Materiais≠000)
+        // passam a ver somente a aba Materiais.
         const hasAdmin = App.Core.Security.hasModuleAccess('admin');
         const hasMateriais = App.Core.Security.hasModuleAccess('materiais');
 
@@ -42,8 +53,7 @@ App.Admin.CRUD = {
         if (hasAdmin) availableTabs.push({ id: 'acessos', label: 'Acessos' });
         if (hasMateriais) availableTabs.push({ id: 'materiais', label: 'Materiais' });
 
-        // [FIX T1-a / Item 1.8] Guard: se a aba ativa não está disponível para este perfil
-        // (ex.: activeTab='acessos' vindo do default, mas o usuário só tem Materiais),
+        // [1.8] Guard: se a aba ativa não está disponível para este perfil,
         // cai para a primeira aba permitida.
         if (availableTabs.length === 0 || !availableTabs.find(t => t.id === this.state.activeTab)) {
             this.state.activeTab = availableTabs.length > 0 ? availableTabs[0].id : null;
@@ -110,9 +120,7 @@ App.Admin.CRUD = {
                 </div>
             `;
         } else {
-            // [FIX T1-a / Item 1.8] Caminho defensivo: perfil sem acesso a nenhuma aba do painel.
-            // Não deve ocorrer pelo fluxo normal de navegação (Layout só roteia com acesso),
-            // mas protege contra acessos diretos ou mudanças de permissão em sessão ativa.
+            // [1.8] Caminho defensivo: perfil sem acesso a nenhuma aba do painel.
             content.innerHTML = `<div class="text-center text-slate-400 py-10 text-sm">Sem permissão de acesso a este painel.</div>`;
         }
     },
@@ -133,10 +141,13 @@ App.Admin.CRUD = {
         }
     },
 
+    // [v3] Cadastro de novo contato SEM RBAC automático: o contato nasce sem ID
+    // (contato de mapa). A concessão de acesso (e geração de ID) acontece depois,
+    // via Aba Acessos: buscar o contato e salvar a configuração.
     openCreateContactModal: function(phone) {
         App.Core.UI.Modal.open({
             title: "Cadastrar Novo Contato",
-            subtitle: "Preencha os dados para cadastrar e configurar o acesso",
+            subtitle: "Preencha os dados do contato (ID será gerado quando receber acesso)",
             body: '<div id="admin-create-contact-container"></div>'
         });
 
@@ -148,32 +159,12 @@ App.Admin.CRUD = {
         App.UI.ContactForm.init('#admin-create-contact-container', {
             funcoes: funcoesArray,
             canEdit: true,
-            saveButtonText: "Cadastrar e Configurar Acesso",
+            saveButtonText: "Cadastrar Contato",
             onCancel: function() {
                 App.Core.UI.Modal.close();
             },
             onSaveSuccess: (contactData) => {
                 App.Core.UI.Modal.close();
-                
-                let defaultCodigo = "";
-                if (this.state.dictionaries && this.state.dictionaries.modulos) {
-                    defaultCodigo = this.state.dictionaries.modulos.map(() => '000').join('');
-                }
-                
-                const newContactMock = {
-                    id: contactData.id,
-                    nome: contactData.nome,
-                    telefone: contactData.phone, 
-                    bairro: contactData.bairro,
-                    ref: contactData.ref,
-                    equipe: contactData.equipe,
-                    funcao: contactData.funcao,
-                    codigoAcesso: defaultCodigo,
-                    hasSenha: false
-                };
-                
-                this.state.foundContact = newContactMock;
-                this.renderAccessForm(newContactMock);
             }
         });
 
@@ -184,6 +175,7 @@ App.Admin.CRUD = {
         }
     },
 
+    // [v3] Formulário de acesso: contato sem ID exibe a indicação de geração no salvamento
     renderAccessForm: function(contact) {
         const resultArea = document.getElementById('admin-result-area');
         const dicts = this.state.dictionaries;
@@ -258,12 +250,15 @@ App.Admin.CRUD = {
         }
         modulosHtml += '</div>';
 
+        // [v3] Contato sem ID: indica geração ao salvar
+        const idDisplay = (contact.id && contact.id !== "") ? contact.id : '<span class="text-indigo-600">será gerado ao salvar</span>';
+
         resultArea.innerHTML = `
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <div class="flex justify-between items-start mb-6 pb-4 border-b border-slate-100">
                     <div>
                         <h3 class="text-xl font-bold text-slate-800">${contact.nome}</h3>
-                        <p class="text-sm text-slate-500">ID: ${contact.id} | Tel: ${contact.telefone || 'N/A'} | ${contact.bairro}</p>
+                        <p class="text-sm text-slate-500">ID: ${idDisplay} | Tel: ${contact.telefone || 'N/A'} | ${contact.bairro}</p>
                     </div>
                     <button onclick="App.Admin.CRUD.saveAccess()" class="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-sm">
                         Salvar Alterações
@@ -297,6 +292,8 @@ App.Admin.CRUD = {
         input.value = randomPass;
     },
 
+    // [v3] Envia userPhone para o caminho de criação de ID (contato sem ID);
+    // sucesso com newId atualiza o estado para re-saves usarem o caminho por ID.
     saveAccess: async function() {
         if (!this.state.foundContact) return;
 
@@ -323,7 +320,8 @@ App.Admin.CRUD = {
 
         const payload = {
             action: 'saveUserAccess',
-            userId: this.state.foundContact.id,
+            userId: this.state.foundContact.id || "",
+            userPhone: this.state.foundContact.telefone || "",
             senha: senha,
             codigoAcesso: codigoAcesso,
             equipes: equipesCodigosStr
@@ -343,12 +341,19 @@ App.Admin.CRUD = {
             App.UI.Loader.hide();
             App.UI.SuccessToast.show(1500);
 
+            // [v3] ID gerado: atualiza o estado — re-saves usam o caminho por ID
+            if (res.newId) {
+                this.state.foundContact.id = res.newId;
+            }
+
             const senhaMsg = senha ? `Nova senha: <span class="font-bold text-slate-900 tracking-widest">${senha}</span>` : 'Senha anterior mantida.';
+            const idMsg = res.newId ? `ID gerado: <span class="font-bold text-slate-900">${res.newId}</span>` : '';
             
             resultArea.innerHTML = `
                 <div class="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl text-center">
                     <svg class="w-12 h-12 text-emerald-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     <h3 class="text-lg font-bold text-emerald-700 mb-2">Acesso Atualizado com Sucesso!</h3>
+                    ${idMsg ? `<p class="text-sm text-slate-600 mb-1">${idMsg}</p>` : ''}
                     <p class="text-sm text-slate-600">${senhaMsg}</p>
                     <p class="text-xs text-slate-400 mt-2">Código de Permissões: ${codigoAcesso}</p>
                     <button onclick="App.Admin.CRUD.init()" class="mt-4 px-6 py-2 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-colors">Novo Cadastro</button>
@@ -486,6 +491,8 @@ App.Admin.CRUD = {
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-1">Mobilizador (Nome ou Telefone)</label>
                         <div id="mat-dist-search-container"></div>
+                        <!-- [v7] Feedback de receptor inválido (sem ID) -->
+                        <p id="mat-dist-feedback" class="text-xs font-medium mt-1 hidden"></p>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-1">Item</label>
@@ -540,14 +547,30 @@ App.Admin.CRUD = {
             ]
         });
         
-        // Inicializa a busca dentro do modal de distribuição
+        // [v7] Busca com bloqueio de receptor sem ID:
+        // confirmMaterialReceipt valida receptor == userId LOGADO — receptor sem
+        // ID nunca loga, logo nunca confirma o recebimento (pendência eterna no
+        // funil de auditoria). Receptor de material = participante com acesso.
         App.UI.ContactSearch.init('#mat-dist-search-container', {
             onResult: (contact) => {
                 const btnDist = document.getElementById('btn-dist-mat');
-                if (contact) {
+                const feedback = document.getElementById('mat-dist-feedback');
+                
+                if (contact && contact.id && contact.id !== "") {
                     receptorId = contact.id;
                     if(btnDist) { btnDist.disabled = false; btnDist.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
+                    if (feedback) feedback.classList.add('hidden');
                 } else {
+                    if (contact) {
+                        // [v7] Sem ID — bloqueado: feedback âmbar com orientação
+                        if (feedback) {
+                            feedback.innerText = contact.nome + " não possui acesso ao painel — não poderá confirmar o recebimento. Conceda o acesso pelo Admin ou selecione outro receptor.";
+                            feedback.className = "text-xs font-medium mt-1 text-amber-600";
+                            feedback.classList.remove('hidden');
+                        }
+                    } else {
+                        if (feedback) feedback.classList.add('hidden');
+                    }
                     receptorId = null;
                     if(btnDist) { btnDist.disabled = true; btnDist.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none'); }
                 }

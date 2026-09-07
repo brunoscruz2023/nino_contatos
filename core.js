@@ -1,4 +1,11 @@
 // core.js
+// [A2-2] getPendingEventTasks: pendência para participantes da árvore INTEIRA.
+// [F2]   getPendingEventTasks: pendência de check-in APENAS para eventos onde o
+//        usuário AINDA NÃO fez check-in (presença própria: org==part==userId no
+//        rawPresencas). Quem já checkou não é notificado — o registro de
+//        presentes passa a ser feito pela Agenda (botão Cadastrar Presenças — F3,
+//        eventos_app.js), não pela pendência de login.
+// Nota:  postEvent SEM o hardening 1.11 — item pendente de autorização própria.
 
 // ==========================================
 // IDs e Nomes das Planilhas (Centralizado)
@@ -287,6 +294,12 @@ App.Core.UI.openChangePasswordModal = function(session) {
 // MÓDULO: TASK MANAGER (Motor de Tarefas Unificado)
 // ==========================================
 App.Core.TaskManager = {
+    // [A2-2] Pendências de eventos de HOJE para participantes da ÁRVORE INTEIRA
+    // (qualquer papel — coordenador, supervisor, mobilizador).
+    // [F2] APENAS eventos onde o usuário AINDA NÃO fez check-in (presença própria
+    // no rawPresencas: org == part == userId). Quem já checkou não é notificado —
+    // o registro de presentes fica acessível pela Agenda (botão Cadastrar
+    // Presenças, implementado em eventos_app.js / F3).
     getPendingEventTasks: function(userId) {
         if (!App.Core.Security.canCheckIn() || !eventosDatabase || eventosDatabase.length === 0) return [];
         
@@ -299,10 +312,43 @@ App.Core.TaskManager = {
             evDate.setHours(0, 0, 0, 0);
             
             if (evDate.getTime() === today.getTime()) {
-                let isParticipant = ev.participacoes.some(p => 
-                    p.coordenadorId === userId || p.supervisorId === userId || p.mobilizadorId === userId
-                );
-                if (isParticipant) {
+                // [A2-2] Árvore inteira (qualquer nó) — via helper global
+                let treeIds = (typeof getTreeParticipants === 'function') ? getTreeParticipants(ev) : [];
+                let isParticipant = treeIds.indexOf(userId) !== -1;
+                
+                // Caminho legado (participacoes — mobilizadores e coordenadores/supervisores atribuídos)
+                if (!isParticipant && ev.participacoes && ev.participacoes.length > 0) {
+                    isParticipant = ev.participacoes.some(p => 
+                        p.coordenadorId === userId || p.supervisorId === userId || p.mobilizadorId === userId
+                    );
+                }
+                
+                // [F2] Já fez check-in? (presença própria: org == part == userId)
+                if (isParticipant && ev.rawPresencas) {
+                    let ownList = ev.rawPresencas[userId] || [];
+                    let hasCheckin = ownList.indexOf(userId) !== -1;
+                    
+                    // Cobertura adicional: presença própria registrada sob outro organizador
+                    // (fluxos legados) — o ID do usuário aparece como participante de si mesmo
+                    if (!hasCheckin) {
+                        for (let orgId in ev.rawPresencas) {
+                            if ((ev.rawPresencas[orgId] || []).indexOf(userId) !== -1 && orgId === userId) {
+                                hasCheckin = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (!hasCheckin) {
+                        tasks.push({
+                            id: ev.idEvento,
+                            type: 'EVENT_CHECKIN',
+                            label: 'Iniciar Atuação no Evento: ' + ev.nome,
+                            actionRef: ev.idEvento
+                        });
+                    }
+                } else if (isParticipant) {
+                    // Sem rawPresencas (dados antigos em cache) — mantém pendência (comportamento anterior)
                     tasks.push({
                         id: ev.idEvento,
                         type: 'EVENT_CHECKIN',
@@ -379,7 +425,7 @@ App.Core.TaskManager = {
         
         tasks = tasks.concat(customTasks).concat(materialTasks); 
 
-        // NOVO: Adiciona pendência de Devolução de Material se houver itens na posse do usuário
+        // Pendência de Devolução de Material se houver itens na posse do usuário
         if (App.Core.Security.hasModuleAccess('materiais')) {
             let returnableItems = this.getReturnableMaterials(userId);
             if (returnableItems.length > 0) {
@@ -488,7 +534,7 @@ App.Core.TaskManager = {
         });
     },
 
-    // NOVO: Modal Exclusivo para Devolução de Material
+    // Modal Exclusivo para Devolução de Material
     showMaterialReturnModal: function() {
         let userId = App.Core.Security.getUserId();
         let returnableItems = App.Core.TaskManager.getReturnableMaterials(userId);
@@ -597,7 +643,7 @@ App.Core.Router = {
             App.Core.TaskManager.showTaskDetails(taskId);
         } else if (taskType === 'MATERIAL_RECEIPT') {
             App.Core.TaskManager.showMaterialReceiptModal(taskId);
-        } else if (taskType === 'MAT_RETURN') { // NOVO
+        } else if (taskType === 'MAT_RETURN') {
             App.Core.TaskManager.showMaterialReturnModal();
         }
     }
@@ -771,7 +817,8 @@ window.onload = async function() {
             else {
                 if (!passWrapper.classList.contains('hidden')) {
                     passWrapper.classList.add('hidden'); passInput.value = ''; passInput.type = 'password'; eyeBtn.classList.add('hidden');
-                    document.getElementById('eye-icon-show').classList.remove('hidden'); document.getElementById('eye-icon-hide').classList.add('hidden');
+                    document.getElementById('eye-icon-show').classList.remove('hidden');
+                    document.getElementById('eye-icon-hide').classList.add('hidden');
                 }
             }
         });

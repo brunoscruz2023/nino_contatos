@@ -1,6 +1,18 @@
 // eventos_crud.js
+// [E1-a/E1-b] Presença com dedup no backend; feedback de duplicado no frontend.
+// [E2/S2] Modal de Tarefa Avulsa com busca por Nome ou Telefone (ContactSearch).
+// [A2]    iniciarAtuacao: participante de QUALQUER papel faz check-in DE SI MESMO.
+// [A2-2]  Participação verificada na ÁRVORE INTEIRA via getTreeParticipants.
+// [F1]    Pós-check-in: atualiza rawPresencas em memória + renderEventosView().
+// [J2]    Recomputação em tempo real do qtdPresentes via contarPresentesUnicos.
+// [K]     Modal de presença: payload inclui presencePhone (contactData.phone) —
+//         o backend v10 resolve o ID do participante (gera se não tiver) quando
+//         o ContactForm criou/atualizou um contato sem ID. Fluxo: novo contato
+//         → criado sem ID → presença gravada com ID gerado no backend → contato
+//         passa a TER ID na planilha. ID = referência; Código = Admin exclusivo.
+// Notas:  presenceList e handleTaskPhoneInput removidos (código morto, item 4.9).
+
 App.Eventos.CRUD = (function() {
-    let presenceList = []; 
     let currentEditingEventId = null;
 
     function init() {
@@ -58,10 +70,6 @@ App.Eventos.CRUD = (function() {
 
     // ==========================================
     // MODAL DE CRIAÇÃO DE TAREFA AVULSA
-    // [E2/S2] Busca por Nome ou Telefone via App.UI.ContactSearch.
-    // Substitui o input de telefone + lookupContactByPhone (action inexistente no backend,
-    // item 1.1) — o ID do responsável agora é resolvido pela própria busca, eliminando
-    // o segundo POST e o contrato quebrado. Padrão idêntico ao Admin e a Distribuir Material.
     // ==========================================
     function openCreateTaskModal() {
         const today = new Date().toLocaleDateString('pt-BR');
@@ -106,7 +114,6 @@ App.Eventos.CRUD = (function() {
                         }
 
                         App.UI.Loader.show();
-                        // [E2/S2] O ID já veio resolvido da busca — criação direta no backend
                         const payload = {
                             action: 'createTask',
                             userId: taskRespId,
@@ -141,7 +148,6 @@ App.Eventos.CRUD = (function() {
         const btnCreate = document.getElementById('btn-create-task');
         if (btnCreate) btnCreate.disabled = true;
 
-        // [E2/S2] Componente de busca reutilizável — dropdown acima do modal (z-[130] > z-[120])
         App.UI.ContactSearch.init('#task-resp-search-container', {
             onResult: (contact) => {
                 const nameEl = document.getElementById('task-resp-name');
@@ -299,10 +305,26 @@ App.Eventos.CRUD = (function() {
         });
     }
 
+    // [F1/J2] Atualização em memória pós-check-in: badge E TOTAL refletem imediatamente.
+    function atualizarCheckinEmMemoria(eventId, userId) {
+        let evInDb = eventosDatabase.find(e => e.idEvento === eventId);
+        if (!evInDb) return;
+        
+        if (!evInDb.rawPresencas) evInDb.rawPresencas = {};
+        if (!evInDb.rawPresencas[userId]) evInDb.rawPresencas[userId] = [];
+        if (evInDb.rawPresencas[userId].indexOf(userId) === -1) {
+            evInDb.rawPresencas[userId].push(userId);
+        }
+        
+        if (typeof contarPresentesUnicos === 'function') {
+            evInDb.qtdPresentes = contarPresentesUnicos(evInDb.rawPresencas);
+        }
+        
+        if (typeof renderEventosView === 'function') renderEventosView();
+    }
+
     // ==========================================
-    // INICIAR ATUAÇÃO (AUTO CHECK-IN ORGANIZADOR)
-    // [E1-b] Presença duplicada (auto-check-in já registrado): segue direto ao
-    // modal de presença, sem toast de sucesso duplicado.
+    // INICIAR ATUAÇÃO (AUTO CHECK-IN)
     // ==========================================
     async function iniciarAtuacao(eventId) {
         const ev = eventosDatabase.find(e => e.idEvento === eventId);
@@ -310,16 +332,15 @@ App.Eventos.CRUD = (function() {
 
         const userId = App.Core.Security.getUserId();
         
-        let isParticipant = ev.participacoes.some(p => 
-            p.coordenadorId === userId || p.supervisorId === userId || p.mobilizadorId === userId
-        );
+        let treeIds = (typeof getTreeParticipants === 'function') ? getTreeParticipants(ev) : [];
+        let isParticipant = treeIds.indexOf(userId) !== -1 ||
+            (ev.participacoes && ev.participacoes.some(p => 
+                p.coordenadorId === userId || p.supervisorId === userId || p.mobilizadorId === userId
+            ));
 
-        let mobIdToUse = userId;
-        
         if (!isParticipant) {
-            let p = ev.participacoes.find(pa => pa.mobilizadorId && pa.mobilizadorId !== "ND");
-            if (p) mobIdToUse = p.mobilizadorId;
-            else { alert("Nenhum mobilizador neste evento para testes."); return; }
+            alert("Você não faz parte da estrutura deste evento. A presença é registrada apenas por participantes (adicionados à estrutura hierárquica do evento).");
+            return;
         }
 
         App.UI.Loader.show();
@@ -328,8 +349,8 @@ App.Eventos.CRUD = (function() {
         const autoCheckinPayload = {
             action: 'updatePresence',
             eventId: eventId,
-            mobId: mobIdToUse,
-            presence: mobIdToUse, 
+            mobId: userId,
+            presence: userId, 
             userId: userId,
             lat: coords.lat,
             lng: coords.lng
@@ -345,14 +366,15 @@ App.Eventos.CRUD = (function() {
             
             App.UI.Loader.hide();
             
-            // [E1-b] Se o auto-check-in já existia (duplicate), abre o modal diretamente
+            atualizarCheckinEmMemoria(eventId, userId);
+            
             if (!res.duplicate) {
                 App.UI.SuccessToast.show(1000);
                 setTimeout(() => {
-                    openPresenceModal(eventId, mobIdToUse);
+                    openPresenceModal(eventId, userId);
                 }, 1100);
             } else {
-                openPresenceModal(eventId, mobIdToUse);
+                openPresenceModal(eventId, userId);
             }
 
         } catch (err) {
@@ -363,7 +385,8 @@ App.Eventos.CRUD = (function() {
 
     // ==========================================
     // PRESENÇA USANDO COMPONENTE REUTILIZÁVEL
-    // [E2/S1-a] O campo único do ContactForm aceita Telefone OU Nome.
+    // [K] Payload inclui presencePhone — o backend resolve o ID do participante
+    //     quando o ContactForm criou/atualizou um contato sem ID.
     // ==========================================
     function openPresenceModal(eventId, mobId) {
         const ev = eventosDatabase.find(e => e.idEvento === eventId);
@@ -380,7 +403,6 @@ App.Eventos.CRUD = (function() {
         overlay.classList.remove('hidden');
         overlay.classList.add('flex');
 
-        // Busca a lista de funções para preencher o dropdown do formulário
         let funcoesArray = [];
         if (window.dictsGlobal && window.dictsGlobal.funcoes_contato) {
             funcoesArray = window.dictsGlobal.funcoes_contato.map(f => f.nome);
@@ -389,8 +411,8 @@ App.Eventos.CRUD = (function() {
         App.UI.ContactForm.init('#presence-form-container', {
             canEdit: true, 
             saveButtonText: "Confirmar Presença",
-            lockTeam: false, // Destrava a seleção de equipe
-            funcoes: funcoesArray, // Popula o dropdown de funções
+            lockTeam: false,
+            funcoes: funcoesArray,
             onCancel: function() {
                 App.Eventos.CRUD.closeModal();
             },
@@ -402,7 +424,8 @@ App.Eventos.CRUD = (function() {
                     action: 'updatePresence',
                     eventId: eventId,
                     mobId: mobId,
-                    presence: contactData.id,
+                    presence: contactData.id || "",
+                    presencePhone: contactData.phone || "",  // [K] backend resolve o ID se vazio
                     userId: userId,
                     lat: coords.lat,
                     lng: coords.lng
@@ -416,21 +439,32 @@ App.Eventos.CRUD = (function() {
                         });
                     });
 
-                    // [E1-b] Presença duplicada: informa sem alarme de erro
                     if (presRes.duplicate) {
                         alert("Este participante já teve presença registrada neste evento.");
                     }
 
+                    // [F1/J2] Atualização em memória + re-render (total ao vivo)
                     let evInDb = eventosDatabase.find(e => e.idEvento === eventId);
                     if (evInDb) {
+                        if (!evInDb.rawPresencas) evInDb.rawPresencas = {};
+                        if (!evInDb.rawPresencas[mobId]) evInDb.rawPresencas[mobId] = [];
+                        if (evInDb.rawPresencas[mobId].indexOf(contactData.id) === -1) {
+                            evInDb.rawPresencas[mobId].push(contactData.id);
+                        }
+                        
+                        if (typeof contarPresentesUnicos === 'function') {
+                            evInDb.qtdPresentes = contarPresentesUnicos(evInDb.rawPresencas);
+                        }
+                        
                         let p = evInDb.participacoes.find(pa => pa.mobilizadorId === mobId);
                         if (p) {
                             if (!p.presentesIds.includes(contactData.id)) {
                                 p.presentesIds.push(contactData.id);
                                 p.qtdPresentes = p.presentesIds.length;
-                                evInDb.qtdPresentes = evInDb.participacoes.reduce((acc, curr) => acc + curr.qtdPresentes, 0);
                             }
                         }
+                        
+                        if (typeof renderEventosView === 'function') renderEventosView();
                     }
 
                 } catch (err) {
