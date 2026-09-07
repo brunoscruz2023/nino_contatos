@@ -1,4 +1,14 @@
 // eventos_dados.js
+// [A2] rawPresencas exposto no eventosDatabase (badge de check-in próprio).
+// [J2] qtdPresentes recomputado: PARTICIPANTES ÚNICOS com presença gravada no
+//      evento — todas as linhas da aba Presencas daquele evento, independente do
+//      organizador (inclui check-in próprio de qualquer papel e presenças
+//      registradas por supervisor/coordenador). O cálculo anterior (reduce de
+//      participacoes) era cego a presenças organizadas por não-mobilizadores —
+//      gap introduzido pelo A2, exposto pelo teste J2.
+//      Helper global contarPresentesUnicos(rawPresencas) — consumido também
+//      pelo eventos_crud.js (F1, recomputação em tempo real).
+
 window.App = window.App || {};
 App.Eventos = App.Eventos || {};
 
@@ -7,7 +17,7 @@ let eventosDatabase = [];
 let contatosBase = {};
 let bolhaDatabase = {}; 
 let tarefasDatabase = [];
-let materialsDatabase = []; // NOVO: Array para Movimentação de Materiais
+let materialsDatabase = [];
 
 // Constantes de Planilha
 const EVENTOS_SHEET_ID = '1MRycZz_03uglcwJqYs_G3Kzc2osx6S_z9zYxGMAzsNM'; 
@@ -15,11 +25,25 @@ const EVENTOS_SHEET_NAME = 'Eventos';
 const BASE_CONTATOS_SHEET_NAME = 'Base_Contatos';
 const PRESENCAS_SHEET_NAME = 'Presencas';
 const TASKS_SHEET_NAME = 'Tarefas';
-const MATERIALS_SHEET_NAME = 'Materiais_Movimentacao'; // NOVO
+const MATERIALS_SHEET_NAME = 'Materiais_Movimentacao';
 
 // Helper para limpar apóstrofos remanescentes da leitura do Sheets
 function cleanStr(val) {
   return val ? val.toString().replace(/'/g, "").trim() : "";
+}
+
+// [J2] Helper global: participantes ÚNICOS com presença gravada no evento.
+// Soma as listas de todos os organizadores e deduplica (Set). Semântica:
+// "quantas pessoas compareceram" — inclui check-in próprio de qualquer papel.
+function contarPresentesUnicos(rawPresencas) {
+  if (!rawPresencas) return 0;
+  let unique = new Set();
+  for (let orgId in rawPresencas) {
+    (rawPresencas[orgId] || []).forEach(function(pid) {
+      if (pid) unique.add(pid);
+    });
+  }
+  return unique.size;
 }
 
 // ==========================================
@@ -32,20 +56,20 @@ App.Eventos.Dados = {
             const cbBase = 'cb_bs_' + Date.now();
             const cbPres = 'cb_ps_' + Date.now();
             const cbTasks = 'cb_tk_' + Date.now();
-            const cbMat = 'cb_mat_db_' + Date.now(); // NOVO
+            const cbMat = 'cb_mat_db_' + Date.now();
             
             const urlEventos = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbEv}&sheet=${encodeURIComponent(EVENTOS_SHEET_NAME)}`;
             const urlBase = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbBase}&sheet=${encodeURIComponent(BASE_CONTATOS_SHEET_NAME)}`;
             const urlPresencas = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbPres}&sheet=${encodeURIComponent(PRESENCAS_SHEET_NAME)}`;
             const urlTasks = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbTasks}&sheet=${encodeURIComponent(TASKS_SHEET_NAME)}`;
-            const urlMaterials = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbMat}&sheet=${encodeURIComponent(MATERIALS_SHEET_NAME)}`; // NOVO
+            const urlMaterials = `https://docs.google.com/spreadsheets/d/${EVENTOS_SHEET_ID}/gviz/tq?tqx=responseHandler:${cbMat}&sheet=${encodeURIComponent(MATERIALS_SHEET_NAME)}`;
             
             const [dataEventos, dataBase, dataPresencas, dataTasks, dataMaterials] = await Promise.all([
                 App.Core.Utils.fetchJsonp(urlEventos, cbEv),
                 App.Core.Utils.fetchJsonp(urlBase, cbBase),
                 App.Core.Utils.fetchJsonp(urlPresencas, cbPres),
                 App.Core.Utils.fetchJsonp(urlTasks, cbTasks),
-                App.Core.Utils.fetchJsonp(urlMaterials, cbMat) // NOVO
+                App.Core.Utils.fetchJsonp(urlMaterials, cbMat)
             ]);
             
             this.processarDadosEventos(dataEventos, dataBase, dataPresencas, dataTasks, dataMaterials);
@@ -54,7 +78,7 @@ App.Eventos.Dados = {
                 localStorage.setItem('eventos_cache_v1', JSON.stringify(eventosDatabase));
                 localStorage.setItem('contatos_base_cache_v1', JSON.stringify(contatosBase));
                 localStorage.setItem('tarefas_cache_v1', JSON.stringify(tarefasDatabase));
-                localStorage.setItem('materials_cache_v1', JSON.stringify(materialsDatabase)); // NOVO
+                localStorage.setItem('materials_cache_v1', JSON.stringify(materialsDatabase));
             } catch(e) { console.error("Erro ao salvar cache de eventos/tarefas/materiais", e); }
 
             const viewEventos = document.getElementById('view-eventos');
@@ -77,14 +101,14 @@ App.Eventos.Dados = {
         const cachedEventos = localStorage.getItem('eventos_cache_v1');
         const cachedContatos = localStorage.getItem('contatos_base_cache_v1');
         const cachedTarefas = localStorage.getItem('tarefas_cache_v1');
-        const cachedMaterials = localStorage.getItem('materials_cache_v1'); // NOVO
+        const cachedMaterials = localStorage.getItem('materials_cache_v1');
         
         if (cachedEventos && cachedContatos && cachedTarefas && cachedMaterials) { 
             try {
                 eventosDatabase = JSON.parse(cachedEventos);
                 contatosBase = JSON.parse(cachedContatos);
                 tarefasDatabase = JSON.parse(cachedTarefas);
-                materialsDatabase = JSON.parse(cachedMaterials); // NOVO
+                materialsDatabase = JSON.parse(cachedMaterials);
                 window.contatosBase = contatosBase;
                 return true;
             } catch(e) {
@@ -144,7 +168,7 @@ App.Eventos.Dados = {
         }
         window.contatosBase = contatosBase;
 
-        // 2. Processa a aba Presencas e agrupa por Evento -> Mobilizador -> [Participantes]
+        // 2. Processa a aba Presencas e agrupa por Evento -> Organizador -> [Participantes]
         let presencasMap = {};
         if (jsonPresencas && jsonPresencas.table && jsonPresencas.table.rows) {
             jsonPresencas.table.rows.forEach(row => {
@@ -193,7 +217,11 @@ App.Eventos.Dados = {
                     participacoes = participacoes.concat(App.Eventos.Dados.extractParticipacoes(node, "ND", "ND", presencasDoEvento));
                 });
 
-                let qtdPresentes = participacoes.reduce((acc, curr) => acc + curr.qtdPresentes, 0);
+                // [J2] Total de presentes: PARTICIPANTES ÚNICOS na aba Presencas
+                // (todas as listas de organizadores — inclui qualquer papel).
+                // O reduce de participacoes era cego a presenças organizadas por
+                // supervisor/coordenador (gap do A2, exposto no J2).
+                let qtdPresentes = contarPresentesUnicos(presencasDoEvento);
 
                 eventosDatabase.push({
                     idEvento: idEvento, 
@@ -204,7 +232,8 @@ App.Eventos.Dados = {
                     descricao: desc, 
                     participacoes: participacoes,
                     qtdPresentes: qtdPresentes,
-                    rawJson: estruturaJsonStr
+                    rawJson: estruturaJsonStr,
+                    rawPresencas: presencasDoEvento  // [A2] exposto para badge/F2/F3/F1
                 });
             });
         }
@@ -239,7 +268,7 @@ App.Eventos.Dados = {
             });
         }
 
-        // 5. NOVO: Processa Movimentação de Materiais
+        // 5. Processa Movimentação de Materiais
         materialsDatabase = [];
         if (jsonMaterials && jsonMaterials.table && jsonMaterials.table.rows) {
             jsonMaterials.table.rows.forEach(row => {

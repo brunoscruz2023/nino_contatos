@@ -1,4 +1,10 @@
 // eventos_kiosk.js
+// [BLOCO A — Item 1.3] Pré-carga de bairros e dicionários em paralelo à validação
+//      do token (cold start corrigido em dispositivos sem cache).
+// [E1-a/E1-b] Dedup no backend; feedback âmbar de duplicado no kiosk.
+// [K]   Payload do onSaveSuccess inclui presencePhone — o backend v10 resolve o
+//       ID do participante (gera se não tiver) quando o ContactForm criou um
+//       contato novo sem ID. Mesmo padrão do eventos_crud.js v7.
 window.App = window.App || {};
 App.Eventos = App.Eventos || {};
 
@@ -16,11 +22,9 @@ App.Eventos.Kiosk = {
         this.kioskState.token = token;
 
         // [BLOCO A — Item 1.3] Pré-carga de bairros e dicionários em paralelo à validação do token.
-        // O modo quiosque pula o initApp, logo em dispositivos sem cache o formulário de
-        // participantes abria sem sugestões de bairro, equipes e funções.
-        App.Mapa.Dados.loadBairrosFromCache();      // síncrono: restaura cache local se existir
-        App.Mapa.Dados.fetchBairrosFromNetwork();   // async: popula geoDicionario em background
-        this.loadKioskDictionaries();               // async: popula window.dictsGlobal em background
+        App.Mapa.Dados.loadBairrosFromCache();
+        App.Mapa.Dados.fetchBairrosFromNetwork();
+        this.loadKioskDictionaries();
 
         const statusEl = document.getElementById('kiosk-status');
         const wrapperEl = document.getElementById('kiosk-form-wrapper');
@@ -57,7 +61,6 @@ App.Eventos.Kiosk = {
     },
 
     // [BLOCO A — Item 1.3] Carrega dicionários (equipes, funções, etc.) no modo quiosque.
-    // Fallback imediato do cache local + busca fresca em background.
     loadKioskDictionaries: function() {
         if (!window.dictsGlobal) {
             const cachedDicts = localStorage.getItem('dicts_global_cache');
@@ -122,7 +125,7 @@ App.Eventos.Kiosk = {
             this.kioskState.mobId = res.mobId;
             
             // Auto-Check-in do Organizador
-            // [E1-a] O backend agora deduplica: reabrimentos do quiosque no mesmo evento
+            // [E1-a] O backend deduplica: reabrimentos do quiosque no mesmo evento
             // não geram novas linhas de presença do organizador.
             await this.autoCheckinMobilizer();
 
@@ -186,7 +189,7 @@ App.Eventos.Kiosk = {
             saveButtonText: "Registrar Presença",
             funcoes: funcoesArray,
             onCancel: function() {
-                // No kiosk, cancelar limpa o formulário para o próximo participante, não fecha o quiosque
+                // No kiosk, cancelar limpa o formulário para o próximo participante
                 App.UI.ContactForm.clear();
                 document.getElementById('form-phone').focus();
             },
@@ -196,7 +199,8 @@ App.Eventos.Kiosk = {
                     action: 'updatePresence',
                     eventId: App.Eventos.Kiosk.kioskState.eventId,
                     mobId: App.Eventos.Kiosk.kioskState.mobId,
-                    presence: contactData.id,
+                    presence: contactData.id || "",
+                    presencePhone: contactData.phone || "",  // [K] backend resolve o ID se vazio
                     userId: 'KIOSK_MODE',
                     lat: coords.lat,
                     lng: coords.lng
@@ -211,7 +215,7 @@ App.Eventos.Kiosk = {
                     });
 
                     // [E1-b] Presença duplicada no quiosque: feedback âmbar no status.
-                    // O toast verde exibido antes refere-se ao salvamento do CONTATO, não à presença.
+                    // O toast verde exibido antes refere-se ao salvamento do CONTATO.
                     if (presRes.duplicate) {
                         const statusEl = document.getElementById('kiosk-status');
                         if (statusEl) {
